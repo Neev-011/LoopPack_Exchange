@@ -84,6 +84,9 @@ export default function MarketplacePage() {
   const [claimedItem, setClaimedItem] = useState(null);
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
+  const [orderDetails, setOrderDetails] = useState({ quantity: '', destination: '', paymentMethod: 'Cash on delivery' });
+  const [orderError, setOrderError] = useState('');
+  const [ordering, setOrdering] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -94,6 +97,12 @@ export default function MarketplacePage() {
   useEffect(() => {
     setInquiryMessage('');
     setInquirySent(false);
+    setOrderError('');
+    setOrderDetails({
+      quantity: selectedProduct?.quantity || '',
+      destination: '',
+      paymentMethod: 'Cash on delivery'
+    });
   }, [selectedProduct?.id]);
 
   // Fetch live database listings from Neon PostgreSQL
@@ -126,12 +135,41 @@ export default function MarketplacePage() {
     });
   }, [dbListings, filterType, maxRadius]);
 
-  const handleConfirmReserve = (item) => {
-    setSelectedProduct(null);
-    setClaimedItem(item);
-    setTimeout(() => {
-      setClaimedItem(null);
-    }, 3500);
+  const handleConfirmReserve = async (event) => {
+    event.preventDefault();
+    if (!currentUser) {
+      setOrderError('Please sign in before reserving material.');
+      return;
+    }
+    setOrdering(true);
+    setOrderError('');
+    try {
+      const response = await fetch(`${API_BASE_URL}/orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          listingId: selectedProduct.id,
+          buyer: {
+            id: currentUser.id,
+            username: currentUser.username,
+            companyName: currentUser.companyName,
+            email: currentUser.email
+          },
+          quantity: Number(orderDetails.quantity),
+          destination: orderDetails.destination,
+          paymentMethod: orderDetails.paymentMethod
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not complete reservation.');
+      setDbListings(current => current.filter(item => String(item.id) !== String(selectedProduct.id)));
+      setSelectedProduct(null);
+      setClaimedItem({ ...selectedProduct, order: data.data });
+    } catch (error) {
+      setOrderError(error.message);
+    } finally {
+      setOrdering(false);
+    }
   };
 
   const sendInquiry = async () => {
@@ -533,16 +571,37 @@ export default function MarketplacePage() {
                 )}
               </div>
 
-              {/* Modal Action Buttons */}
-              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                <button
-                  className="btn-primary"
-                  style={{ flex: 1, padding: '12px', justifyContent: 'center', fontSize: '1rem' }}
-                  onClick={() => handleConfirmReserve(selectedProduct)}
-                >
-                  <Truck size={18} /> Reserve Lot & Dispatch Pickup
+              {/* Checkout and reservation */}
+              <form onSubmit={handleConfirmReserve} style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', padding: 16, borderRadius: 10, marginTop: 24 }}>
+                <h4 style={{ margin: '0 0 12px', color: '#065F46' }}>Complete reservation</h4>
+                {!currentUser && <p style={{ color: '#B45309', marginTop: 0 }}>Sign in to provide buyer and payment information.</p>}
+                {orderError && <div style={{ color: '#991B1B', background: '#FEF2F2', padding: 8, borderRadius: 6, marginBottom: 10 }}>{orderError}</div>}
+                <label style={{ display: 'block', marginBottom: 10, color: '#334155', fontSize: 13 }}>
+                  Quantity ({selectedProduct.unit || 'units'})
+                  <input type="number" min="1" max={selectedProduct.quantity} required value={orderDetails.quantity} onChange={event => setOrderDetails({ ...orderDetails, quantity: event.target.value })} style={{ width: '100%', padding: 9, marginTop: 4, border: '1px solid #CBD5E1', borderRadius: 6 }} />
+                </label>
+                <label style={{ display: 'block', marginBottom: 10, color: '#334155', fontSize: 13 }}>
+                  Delivery destination
+                  <textarea required rows="2" value={orderDetails.destination} onChange={event => setOrderDetails({ ...orderDetails, destination: event.target.value })} placeholder="Full delivery address and contact details" style={{ width: '100%', padding: 9, marginTop: 4, border: '1px solid #CBD5E1', borderRadius: 6 }} />
+                </label>
+                <label style={{ display: 'block', color: '#334155', fontSize: 13 }}>
+                  Payment method
+                  <select value={orderDetails.paymentMethod} onChange={event => setOrderDetails({ ...orderDetails, paymentMethod: event.target.value })} style={{ width: '100%', padding: 9, marginTop: 4, border: '1px solid #CBD5E1', borderRadius: 6 }}>
+                    <option>Cash on delivery</option>
+                    <option>Bank transfer</option>
+                    <option>UPI</option>
+                    <option>Pay on pickup</option>
+                  </select>
+                </label>
+                <button className="btn-primary" type="submit" disabled={ordering || isOwnListing} style={{ width: '100%', justifyContent: 'center', marginTop: 14 }}>
+                  <Truck size={18} /> {ordering ? 'Processing reservation...' : 'Confirm purchase & dispatch pickup'}
                 </button>
+              </form>
+
+              {/* Modal Action Buttons */}
+              <div style={{ display: 'flex', gap: '12px', marginTop: '14px' }}>
                 <button
+                  type="button"
                   className="btn-secondary"
                   style={{ padding: '12px 20px', fontSize: '0.95rem' }}
                   onClick={() => setSelectedProduct(null)}
