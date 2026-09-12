@@ -161,8 +161,29 @@ export async function initNeonTables() {
       )
     `;
 
+    // 5. Trucks Table
+    await client`
+      CREATE TABLE IF NOT EXISTS trucks (
+        id VARCHAR(64) PRIMARY KEY,
+        truck_name VARCHAR(255) NOT NULL,
+        vehicle_reg VARCHAR(100) NOT NULL,
+        capacity_tons NUMERIC NOT NULL,
+        origin_city VARCHAR(255) NOT NULL,
+        destination_city VARCHAR(255) NOT NULL,
+        available_date VARCHAR(100),
+        rate_per_km NUMERIC DEFAULT 0,
+        driver_name VARCHAR(100),
+        driver_phone VARCHAR(50),
+        status VARCHAR(50) DEFAULT 'available',
+        created_by VARCHAR(100) NOT NULL,
+        company_name VARCHAR(255) NOT NULL,
+        company_email VARCHAR(255),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     isNeonConnected = true;
-    console.log('[Neon DB] PostgreSQL tables (listings, inquiries, messages, sales_orders, users) verified/created successfully!');
+    console.log('[Neon DB] PostgreSQL tables (listings, inquiries, messages, sales_orders, users, trucks) verified/created successfully!');
     return true;
   } catch (err) {
     console.error('[Neon DB] Table initialization error:', err.message);
