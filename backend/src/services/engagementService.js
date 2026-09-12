@@ -49,7 +49,8 @@ export async function createInquiry({ listing, buyer, message, quantity }) {
   if (!listing?.id || !listing.createdBy) throw new Error('This listing cannot receive inquiries yet.');
   if (listing.createdBy === buyer.username) throw new Error('You cannot inquire about your own listing.');
   if (!message?.trim()) throw new Error('Please add a message for the seller.');
-  const inquiry = { id: `inq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, listingId: listing.id, listingTitle: listing.title, sellerUsername: listing.createdBy, buyerId: buyer.id, buyerUsername: buyer.username, buyerCompanyName: buyer.companyName, message: message.trim(), quantity: Number(quantity) || listing.quantity, status: 'new', createdAt: new Date().toISOString() };
+  const cleanQty = Math.max(1, Number(quantity) || Number(listing.quantity) || 1);
+  const inquiry = { id: `inq_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, listingId: listing.id, listingTitle: listing.title, sellerUsername: listing.createdBy, buyerId: buyer.id, buyerUsername: buyer.username, buyerCompanyName: buyer.companyName, message: message.trim(), quantity: cleanQty, status: 'new', createdAt: new Date().toISOString() };
   const client = getNeonClient();
   if (client) {
     await client`INSERT INTO inquiries (id, listing_id, listing_title, buyer_id, buyer_username, buyer_company, seller_username, message, quantity, status, created_at) VALUES (${inquiry.id}, ${String(inquiry.listingId)}, ${inquiry.listingTitle}, ${inquiry.buyerId}, ${inquiry.buyerUsername}, ${inquiry.buyerCompanyName}, ${inquiry.sellerUsername}, ${inquiry.message}, ${inquiry.quantity}, ${inquiry.status}, ${inquiry.createdAt})`;

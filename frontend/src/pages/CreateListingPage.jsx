@@ -45,16 +45,24 @@ export default function CreateListingPage({ setActiveTab }) {
       setErrorMsg('Please sign in before posting a material so buyers can contact you and you can manage inquiries.');
       return;
     }
+    const cleanQuantity = Math.max(1, Number(quantity) || 1);
+    const cleanPrice = Math.max(0, Number(price) || 0);
+
+    if (cleanQuantity <= 0) {
+      setErrorMsg('Quantity must be greater than 0.');
+      return;
+    }
+
     setLoading(true);
     setErrorMsg(null);
 
     const payload = {
-      title: title || `${quantity}x ${materialType.toUpperCase()} Circular Packaging Lot`,
+      title: title || `${cleanQuantity}x ${materialType.toUpperCase()} Circular Packaging Lot`,
       materialType,
-      quantity: Number(quantity),
+      quantity: cleanQuantity,
       unit: unit || (materialType === 'pallet' ? 'pallets' : materialType === 'hdpe' ? 'drums' : materialType === 'ldpe' ? 'kg' : 'boxes'),
       grade,
-      price: Number(price),
+      price: cleanPrice,
       location,
       lat: 19.08,
       lon: 72.88,
@@ -173,9 +181,14 @@ export default function CreateListingPage({ setActiveTab }) {
             <label style={{ display: 'block', fontWeight: '600', fontSize: '0.9rem', marginBottom: '6px' }}>Quantity</label>
             <input
               type="number"
+              min="1"
+              step="1"
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.95rem' }}
               value={quantity}
-              onChange={(e) => setQuantity(Number(e.target.value))}
+              onChange={(e) => {
+                const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                setQuantity(val);
+              }}
               required
             />
           </div>
@@ -195,9 +208,14 @@ export default function CreateListingPage({ setActiveTab }) {
             <label style={{ display: 'block', fontWeight: '600', fontSize: '0.9rem', marginBottom: '6px' }}>Asking Price (₹ / unit)</label>
             <input
               type="number"
+              min="0"
+              step="1"
               style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.95rem' }}
               value={price}
-              onChange={(e) => setPrice(Number(e.target.value))}
+              onChange={(e) => {
+                const val = Math.max(0, Number(e.target.value) || 0);
+                setPrice(val);
+              }}
             />
           </div>
         </div>
