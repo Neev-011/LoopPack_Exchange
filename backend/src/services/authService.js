@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getNeonClient } from '../config/neonDb.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -74,6 +75,36 @@ function saveUsers(users) {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+
+    const client = getNeonClient();
+    if (client) {
+      (async () => {
+        try {
+          for (const u of users) {
+            await client`
+              INSERT INTO users (
+                id, username, company_name, email, password, role, role_label, industry, security_question, security_answer, created_at
+              ) VALUES (
+                ${u.id}, ${u.username}, ${u.companyName}, ${u.email}, ${u.password},
+                ${u.role || 'supplier'}, ${u.roleLabel || 'B2B Partner'}, ${u.industry || 'Packaging'},
+                ${u.securityQuestion || ''}, ${u.securityAnswer || ''}, ${u.createdAt || new Date().toISOString()}
+              )
+              ON CONFLICT (username) DO UPDATE SET
+                company_name = EXCLUDED.company_name,
+                email = EXCLUDED.email,
+                password = EXCLUDED.password,
+                role = EXCLUDED.role,
+                role_label = EXCLUDED.role_label,
+                industry = EXCLUDED.industry,
+                security_question = EXCLUDED.security_question,
+                security_answer = EXCLUDED.security_answer
+            `;
+          }
+        } catch (dbErr) {
+          console.error('[AuthService Neon Sync Error]:', dbErr.message);
+        }
+      })();
+    }
   } catch (err) {
     console.error('[AuthService] Error saving users file:', err);
   }

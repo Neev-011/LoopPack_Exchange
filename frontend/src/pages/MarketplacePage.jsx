@@ -77,21 +77,27 @@ export default function MarketplacePage() {
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
 
-  // Fetch live database listings
-  useEffect(() => {
-    async function fetchListings() {
-      try {
-        const res = await fetch(`${API_BASE_URL}/listings`);
-        if (res.ok) {
-          const json = await res.json();
-          if (json.data && json.data.length > 0) {
-            setDbListings(json.data);
-          }
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Fetch live database listings from Neon PostgreSQL
+  const fetchListings = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/listings`);
+      if (res.ok) {
+        const json = await res.json();
+        if (Array.isArray(json.data)) {
+          setDbListings(json.data);
         }
-      } catch (err) {
-        console.warn('Backend fetch offline, showing local listings:', err);
       }
+    } catch (err) {
+      console.warn('Backend fetch offline, showing local listings:', err);
+    } finally {
+      setRefreshing(false);
     }
+  };
+
+  useEffect(() => {
     fetchListings();
   }, []);
 
@@ -161,20 +167,20 @@ export default function MarketplacePage() {
           alignItems: 'center',
           gap: '12px'
         }}>
-          <span style={{ fontSize: '0.85rem', fontWeight: '600', color: '#475569' }}>
-            Distance Radius: <strong style={{ color: '#0F5132' }}>{maxRadius} km</strong>
-          </span>
-          <input
-            type="range"
-            min="5"
-            max="50"
-            step="5"
-            value={maxRadius}
-            onChange={(e) => setMaxRadius(Number(e.target.value))}
-            style={{ width: '120px', accentColor: '#10B981', cursor: 'pointer' }}
-          />
+            <span style={{ fontSize: '0.85rem', fontWeight: '600', color: '#475569' }}>
+              Distance Radius: <strong style={{ color: '#0F5132' }}>{maxRadius} km</strong>
+            </span>
+            <input
+              type="range"
+              min="5"
+              max="50"
+              step="5"
+              value={maxRadius}
+              onChange={(e) => setMaxRadius(Number(e.target.value))}
+              style={{ width: '120px', accentColor: '#10B981', cursor: 'pointer' }}
+            />
+          </div>
         </div>
-      </div>
 
       {/* Category Filter Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
