@@ -1,12 +1,29 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  MapPin, Package, ShieldCheck, Leaf, ArrowRight, Truck,
+  MapPin, Package, ShieldCheck, Leaf, ArrowRight, Truck, Navigation,
   CheckCircle, RefreshCw, Check, X, Building2, Calendar, FileText, Info, Award, DollarSign, MessageSquare
 } from 'lucide-react';
 import { calculateAvoidedCarbon } from '../utils/carbonEngine';
 import { useAuth } from '../context/AuthContext';
+import { calculateHaversineDistance } from '../utils/spatialMath';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
+
+const LOGISTICS_HUB_COORDINATES = [
+  { match: 'mahape', lat: 19.115, lon: 73.015 },
+  { match: 'navi mumbai', lat: 19.033, lon: 73.03 },
+  { match: 'thane', lat: 19.2183, lon: 72.9781 },
+  { match: 'bhiwandi', lat: 19.2968, lon: 73.0631 },
+  { match: 'taloja', lat: 19.0622, lon: 73.1114 },
+  { match: 'goregaon', lat: 19.1663, lon: 72.8526 },
+  { match: 'kurla', lat: 19.065, lon: 72.879 },
+  { match: 'mumbai', lat: 19.076, lon: 72.8777 }
+];
+
+function getHubCoordinates(location = '') {
+  const normalized = location.toLowerCase();
+  return LOGISTICS_HUB_COORDINATES.find(hub => normalized.includes(hub.match));
+}
 
 const MOCK_FALLBACK_LISTINGS = [
   {
@@ -115,6 +132,9 @@ export default function MarketplacePage() {
   const [orderDetails, setOrderDetails] = useState({ quantity: '', destination: '', paymentMethod: 'Cash on delivery' });
   const [orderError, setOrderError] = useState('');
   const [ordering, setOrdering] = useState(false);
+  const [deviceLocation, setDeviceLocation] = useState(null);
+  const [locationStatus, setLocationStatus] = useState('idle');
+  const [nearbyLogistics, setNearbyLogistics] = useState([]);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -149,10 +169,12 @@ export default function MarketplacePage() {
   }, [selectedProduct]);
 
   // Fetch live database listings from Neon PostgreSQL with PostGIS Spatial Distance Radius
-  const fetchListings = async (radius = maxRadius) => {
+  const fetchListings = async (radius = maxRadius, location = deviceLocation) => {
     setRefreshing(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/listings?radiusKm=${radius}&lat=19.076&lon=72.877`);
+      const lat = location?.lat ?? 19.076;
+      const lon = location?.lon ?? 72.877;
+      const res = await fetch(`${API_BASE_URL}/listings?radiusKm=${radius}&lat=${lat}&lon=${lon}`);
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
@@ -168,7 +190,46 @@ export default function MarketplacePage() {
 
   useEffect(() => {
     fetchListings(maxRadius);
-  }, [maxRadius]);
+  }, [maxRadius, deviceLocation]);
+
+  const useMyLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus('unsupported');
+      return;
+    }
+    setLocationStatus('loading');
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        const location = { lat: position.coords.latitude, lon: position.coords.longitude };
+        setDeviceLocation(location);
+        setLocationStatus('ready');
+      },
+      () => setLocationStatus('denied'),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+    );
+  };
+
+  useEffect(() => {
+    if (!deviceLocation) {
+      setNearbyLogistics([]);
+      return;
+    }
+    fetch(`${API_BASE_URL}/trucks`)
+      .then(response => response.json())
+      .then(json => {
+        const matches = (json.data || [])
+          .map(truck => {
+            const hub = getHubCoordinates(truck.originCity);
+            if (!hub) return null;
+            return { ...truck, distanceKm: calculateHaversineDistance(deviceLocation.lat, deviceLocation.lon, hub.lat, hub.lon) };
+          })
+          .filter(Boolean)
+          .filter(truck => truck.distanceKm <= maxRadius)
+          .sort((a, b) => a.distanceKm - b.distanceKm);
+        setNearbyLogistics(matches);
+      })
+      .catch(() => setNearbyLogistics([]));
+  }, [deviceLocation, maxRadius]);
 
   const filteredListings = useMemo(() => {
     return dbListings.filter(item => {
@@ -313,6 +374,39 @@ export default function MarketplacePage() {
           </div>
         </div>
       </div>
+
+      <section style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '12px', padding: '16px 18px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Navigation size={20} color="#047857" />
+            <div>
+              <strong style={{ color: '#14532D' }}>Find nearby logistics</strong>
+              <div style={{ color: '#166534', fontSize: '0.82rem' }}>
+                {locationStatus === 'ready' ? 'Using your device location to match nearby carriers.' : 'Share your location to see available carriers near you.'}
+              </div>
+            </div>
+          </div>
+          <button className="btn-secondary" onClick={useMyLocation} disabled={locationStatus === 'loading'}>
+            <Navigation size={16} /> {locationStatus === 'loading' ? 'Locating...' : locationStatus === 'ready' ? 'Refresh location' : 'Use my location'}
+          </button>
+        </div>
+        {locationStatus === 'denied' && <p style={{ color: '#B45309', fontSize: '0.82rem', margin: '10px 0 0' }}>Location permission was denied. Enable it in your browser settings to find nearby logistics.</p>}
+        {locationStatus === 'unsupported' && <p style={{ color: '#B45309', fontSize: '0.82rem', margin: '10px 0 0' }}>This browser does not provide device location. You can still use the marketplace radius filter.</p>}
+        {locationStatus === 'ready' && nearbyLogistics.length > 0 && (
+          <div style={{ marginTop: '14px' }}>
+            <div style={{ color: '#166534', fontSize: '0.78rem', fontWeight: '800', textTransform: 'uppercase', marginBottom: '8px' }}>Nearby available logistics</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '8px' }}>
+              {nearbyLogistics.map(truck => (
+                <div key={truck.id} style={{ background: 'white', border: '1px solid #D1FAE5', borderRadius: '8px', padding: '10px 12px' }}>
+                  <strong style={{ color: '#0F172A', fontSize: '0.86rem' }}>{truck.truckName}</strong>
+                  <div style={{ color: '#047857', fontSize: '0.78rem', marginTop: '3px' }}>{truck.companyName} · {truck.distanceKm} km away</div>
+                  <div style={{ color: '#64748B', fontSize: '0.76rem', marginTop: '3px' }}>{truck.originCity} → {truck.destinationCity} · {truck.status || 'available'}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* Category Filter Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
