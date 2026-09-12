@@ -478,7 +478,7 @@ app.post('/api/v1/listings', async (req, res) => {
     description: description || 'Verified circular packaging material lot.',
     createdBy,
     companyName,
-    ownerRole: ownerRole || 'Packaging Generator / Supplier',
+    ownerRole: ownerRole || 'Packaging Supplier',
     createdByEmail: createdByEmail || 'contact@looppack.io',
     image: image || (materialType === 'pallet' 
       ? 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?auto=format&fit=crop&w=600&q=80'

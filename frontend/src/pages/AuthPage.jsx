@@ -543,7 +543,7 @@ export default function AuthPage({ setActiveTab }) {
 
               <div>
                 <label style={{ display: 'block', fontSize: '0.88rem', fontWeight: '700', color: '#334155', marginBottom: '6px' }}>
-                  Primary Platform Role
+                  How will you use LoopPack?
                 </label>
                 <select
                   value={regRole}
@@ -558,10 +558,9 @@ export default function AuthPage({ setActiveTab }) {
                     outline: 'none'
                   }}
                 >
-                  <option value="supplier">Packaging Generator / Supplier (Has surplus pallets, boxes)</option>
-                  <option value="buyer">Material Buyer & Recycler (Purchasing circular packaging)</option>
-                  <option value="enterprise">Enterprise Circularity Officer (Auditing Scope 3 carbon)</option>
-                  <option value="logistics">Fleet / Backhaul Logistics Partner</option>
+                  <option value="supplier">Packaging Supplier</option>
+                  <option value="buyer">Buyer / Recycler</option>
+                  <option value="logistics">Logistics Partner</option>
                 </select>
               </div>
 
