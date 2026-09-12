@@ -6,6 +6,14 @@ import { fileURLToPath } from 'url';
 import { computeAvoidedCarbon } from './services/carbonEngineService.js';
 import { searchListingsPostGIS } from './services/spatialService.js';
 import { solveOptimizedBackhaulRoute } from './services/vrpSolverService.js';
+import {
+  getAllDemoUsers,
+  checkUsername,
+  authenticateUser,
+  registerUser,
+  resetPassword,
+  recoverUsername
+} from './services/authService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -53,18 +61,68 @@ app.get('/api/v1/health', (req, res) => {
   });
 });
 
-// 2. Fetch Listings (Spatial / Filtered)
+// 2. Auth Endpoints
+app.get('/api/v1/auth/demo-users', (req, res) => {
+  res.json({ status: 'success', data: getAllDemoUsers() });
+});
+
+app.post('/api/v1/auth/check-username', (req, res) => {
+  const result = checkUsername(req.body?.username);
+  res.json(result);
+});
+
+app.post('/api/v1/auth/login', (req, res) => {
+  try {
+    const user = authenticateUser(req.body);
+    res.json({ status: 'success', user });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/v1/auth/register', (req, res) => {
+  try {
+    const user = registerUser(req.body);
+    res.status(201).json({ status: 'success', user });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/v1/auth/forgot-password', (req, res) => {
+  try {
+    const user = resetPassword(req.body);
+    res.json({ status: 'success', message: 'Password updated successfully. You are now logged in.', user });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/v1/auth/forgot-username', (req, res) => {
+  try {
+    const result = recoverUsername(req.body);
+    res.json({ status: 'success', data: result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// 3. Fetch Listings (Spatial / Filtered / Multi-User Owned)
 app.get('/api/v1/listings', (req, res) => {
   const listings = readDatabase();
   const lat = parseFloat(req.query.lat) || 19.076;
   const lon = parseFloat(req.query.lon) || 72.877;
   const radius = parseFloat(req.query.radiusKm) || 50;
+  const owner = req.query.owner;
 
-  const results = searchListingsPostGIS(listings, lat, lon, radius);
+  let results = searchListingsPostGIS(listings, lat, lon, radius);
+  if (owner) {
+    results = results.filter(item => (item.createdBy || '').toLowerCase() === owner.toLowerCase());
+  }
   res.json({ total: results.length, data: results });
 });
 
-// 3. POST New Material Listing to Database
+// 4. POST New Material Listing to Database with User Attribution
 app.post('/api/v1/listings', (req, res) => {
   const {
     title,
@@ -77,7 +135,10 @@ app.post('/api/v1/listings', (req, res) => {
     lat,
     lon,
     description,
-    image
+    image,
+    createdBy,
+    companyName,
+    ownerRole
   } = req.body;
 
   if (!title || !materialType) {
@@ -100,6 +161,9 @@ app.post('/api/v1/listings', (req, res) => {
     price: Number(price) || 0,
     isFree: Number(price) === 0,
     description: description || 'Verified circular packaging material lot.',
+    createdBy: createdBy || 'apex_logistics',
+    companyName: companyName || 'Apex Packaging Solutions Ltd',
+    ownerRole: ownerRole || 'Packaging Generator / Supplier',
     image: image || (materialType === 'pallet' 
       ? 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?auto=format&fit=crop&w=600&q=80'
       : materialType === 'hdpe'
@@ -116,7 +180,7 @@ app.post('/api/v1/listings', (req, res) => {
   listings.unshift(newListing);
   saveDatabase(listings);
 
-  console.log(`[API] New Material Listing Posted: ID ${newListing.id} - ${newListing.title}`);
+  console.log(`[API] New Material Listing Posted by @${newListing.createdBy} (${newListing.companyName}): ID ${newListing.id} - ${newListing.title}`);
 
   res.status(201).json({
     status: 'success',
@@ -126,14 +190,14 @@ app.post('/api/v1/listings', (req, res) => {
   });
 });
 
-// 4. ISO Carbon Accounting Endpoint
+// 5. ISO Carbon Accounting Endpoint
 app.post('/api/v1/carbon/calculate', (req, res) => {
   const { materialType, quantity, distanceKm, grade } = req.body;
   const result = computeAvoidedCarbon(materialType, quantity, distanceKm, grade);
   res.json(result);
 });
 
-// 5. Eco-Logistics Route Optimization
+// 6. Eco-Logistics Route Optimization
 app.post('/api/v1/logistics/optimize-route', (req, res) => {
   const listings = readDatabase();
   const route = solveOptimizedBackhaulRoute(listings);
