@@ -165,7 +165,7 @@ export default function Navbar({ activeTab, setActiveTab }) {
                   <div style={{ fontSize: '0.72rem', color: '#94A3B8', textTransform: 'uppercase', fontWeight: '700' }}>Enterprise Signed In</div>
                   <div style={{ fontSize: '0.9rem', fontWeight: '800', color: 'white' }}>{currentUser.companyName}</div>
                   <div style={{ fontSize: '0.75rem', color: '#34D399', fontWeight: '600' }}>
-                    Role: {currentUser.role === 'supplier' ? 'Packaging Generator / Supplier' : currentUser.role === 'buyer' ? 'Material Buyer' : 'Circularity Operator'}
+                    Role: {currentUser.role === 'supplier' ? 'Packaging Supplier' : currentUser.role === 'buyer' ? 'Buyer / Recycler' : currentUser.role === 'logistics' ? 'Logistics Partner' : currentUser.roleLabel || 'Existing account role'}
                   </div>
                 </div>
 
