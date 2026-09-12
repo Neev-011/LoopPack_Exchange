@@ -61,18 +61,12 @@ export default function Navbar({ activeTab, setActiveTab }) {
           <Store size={16} /> Geo-Marketplace
         </button>
 
-        {/* Highlighted Call-To-Action Tab */}
+        {/* AI Scanner & Listing Tab */}
         <button
           className={`nav-link ${activeTab === 'create-listing' ? 'active' : ''}`}
           onClick={() => handleNavClick('create-listing')}
-          style={{
-            background: activeTab === 'create-listing' ? 'rgba(16, 185, 129, 0.25)' : 'rgba(16, 185, 129, 0.1)',
-            color: '#A7F3D0',
-            border: '1px solid rgba(16, 185, 129, 0.3)',
-            fontWeight: '700'
-          }}
         >
-          <Sparkles size={16} color="#34D399" /> AI Scanner & List
+          <Sparkles size={16} /> AI Scanner & List
         </button>
 
         <button
