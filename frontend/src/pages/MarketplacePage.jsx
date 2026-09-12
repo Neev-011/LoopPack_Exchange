@@ -221,15 +221,10 @@ export default function MarketplacePage() {
             <span style={{ color: '#64748B', fontSize: '0.82rem' }}>Origin Hub: Mumbai Logistics (19.07°N, 72.87°E)</span>
           </div>
           <h1 style={{ fontSize: '2rem', fontWeight: '800', color: '#0F172A', letterSpacing: '-0.5px' }}>
-            Nearby Material Exchange <span style={{ color: '#10B981' }}>📍</span>
+            Geo-Proximity B2B Marketplace <span style={{ color: '#10B981' }}>📍</span>
           </h1>
           <p style={{ color: '#64748B', fontSize: '0.95rem' }}>
-            Visual map & non-verbal graph metrics for available packaging scrap within your transit zone.
-          <h2 style={{ fontSize: '1.8rem', color: '#0F172A', fontWeight: '800' }}>
-            Geo-Proximity B2B Marketplace
-          </h2>
-          <p style={{ color: '#64748B', fontSize: '0.92rem' }}>
-            Showing available B2B packaging material lots within 25 km radius of your location.
+            Showing available B2B packaging material lots within your spatial transit zone.
           </p>
         </div>
 
