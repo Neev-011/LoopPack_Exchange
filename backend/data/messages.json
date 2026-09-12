@@ -1,0 +1,20 @@
+[
+  {
+    "id": "msg_1789209277665",
+    "inquiryId": "inq_1789209203302",
+    "senderId": "usr_1789203173260",
+    "senderUsername": "kashyap",
+    "senderCompanyName": "kashyap",
+    "body": "Ha ha Vando nai , aapde tamtare mal khali thavo joi...",
+    "createdAt": "2026-09-12T10:34:37.665Z"
+  },
+  {
+    "id": "msg_1789209355406",
+    "inquiryId": "inq_1789209203302",
+    "senderId": "usr_1789208825210",
+    "senderUsername": "neev_limited",
+    "senderCompanyName": "Neev Patel",
+    "body": "ok done che halo hu order kari dav chuuu",
+    "createdAt": "2026-09-12T10:35:55.406Z"
+  }
+]

@@ -244,3 +244,37 @@ export function recoverUsername({ email, companyName }) {
     email: found.email
   };
 }
+
+export function updateUserProfile({ userId, companyName, email, industry }) {
+  if (!userId || !companyName || !email || !industry) {
+    throw new Error('Company name, email, and industry are required.');
+  }
+  const users = readUsers();
+  const index = users.findIndex(user => user.id === userId);
+  if (index === -1) throw new Error('Account not found.');
+  const cleanEmail = email.trim().toLowerCase();
+  if (users.some((user, userIndex) => userIndex !== index && user.email.toLowerCase() === cleanEmail)) {
+    throw new Error('That email address is already used by another account.');
+  }
+  users[index].companyName = companyName.trim();
+  users[index].email = cleanEmail;
+  users[index].industry = industry.trim();
+  users[index].updatedAt = new Date().toISOString();
+  saveUsers(users);
+  return sanitizeUser(users[index]);
+}
+
+export function changeUserPassword({ userId, currentPassword, newPassword }) {
+  if (!userId || !currentPassword || !newPassword) {
+    throw new Error('Current password and new password are required.');
+  }
+  if (newPassword.length < 8) throw new Error('New password must be at least 8 characters.');
+  const users = readUsers();
+  const index = users.findIndex(user => user.id === userId);
+  if (index === -1) throw new Error('Account not found.');
+  if (users[index].password !== currentPassword) throw new Error('Current password is incorrect.');
+  users[index].password = newPassword;
+  users[index].updatedAt = new Date().toISOString();
+  saveUsers(users);
+  return sanitizeUser(users[index]);
+}

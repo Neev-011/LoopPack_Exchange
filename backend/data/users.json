@@ -10,7 +10,8 @@
     "industry": "Logistics & Warehousing",
     "securityQuestion": "What is your company's founding hub city?",
     "securityAnswer": "mumbai",
-    "createdAt": "2026-01-15T09:00:00.000Z"
+    "createdAt": "2026-01-15T09:00:00.000Z",
+    "updatedAt": "2026-09-12T10:25:40.643Z"
   },
   {
     "id": "usr_greenwave",
@@ -50,5 +51,18 @@
     "securityQuestion": "What is your company's founding hub city?",
     "securityAnswer": "ahmedabad",
     "createdAt": "2026-09-12T08:52:53.260Z"
+  },
+  {
+    "id": "usr_1789208825210",
+    "username": "neev_limited",
+    "companyName": "Neev Patel",
+    "email": "neev_hackout@gmail.com",
+    "password": "strong@123",
+    "role": "buyer",
+    "roleLabel": "Material Buyer & Recycler",
+    "industry": "Logistics & Warehousing",
+    "securityQuestion": "What is your company's founding hub city?",
+    "securityAnswer": "mehona",
+    "createdAt": "2026-09-12T10:27:05.210Z"
   }
 ]

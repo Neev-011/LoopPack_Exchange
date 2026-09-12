@@ -7,6 +7,9 @@ import CreateListingPage from './pages/CreateListingPage';
 import EcoLogisticsPage from './pages/EcoLogisticsPage';
 import CarbonDashboardPage from './pages/CarbonDashboardPage';
 import AuthPage from './pages/AuthPage';
+import AccountHubPage from './pages/AccountHubPage';
+import AccountProfilePage from './pages/AccountProfilePage';
+import ChangePasswordPage from './pages/ChangePasswordPage';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('landing');
@@ -22,6 +25,10 @@ export default function App() {
         {activeTab === 'logistics' && <EcoLogisticsPage />}
         {activeTab === 'carbon' && <CarbonDashboardPage />}
         {activeTab === 'auth' && <AuthPage setActiveTab={setActiveTab} />}
+        {activeTab === 'account' && <AccountHubPage setActiveTab={setActiveTab} />}
+        {activeTab === 'inquiries' && <AccountHubPage view="inquiries" setActiveTab={setActiveTab} />}
+        {activeTab === 'profile' && <AccountProfilePage setActiveTab={setActiveTab} />}
+        {activeTab === 'change-password' && <ChangePasswordPage setActiveTab={setActiveTab} />}
       </main>
 
       <Footer />

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Store, PlusCircle, Route, Leaf, ShieldCheck, LogIn, Building2, User } from 'lucide-react';
+import { Store, PlusCircle, Route, Leaf, LogIn, Building2, LayoutDashboard } from 'lucide-react';
 import Logo from './Logo';
 import { useAuth } from '../../context/AuthContext';
 
@@ -46,13 +46,31 @@ export default function Navbar({ activeTab, setActiveTab }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {currentUser && (
+          <button
+            className="btn-secondary"
+            onClick={() => setActiveTab('account')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', whiteSpace: 'nowrap' }}
+          >
+            <LayoutDashboard size={17} /> My Materials
+          </button>
+        )}
+        {currentUser && (
+          <button
+            className="btn-secondary"
+            onClick={() => setActiveTab('inquiries')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', whiteSpace: 'nowrap' }}
+          >
+            My Inquiries
+          </button>
+        )}
         <button className="btn-primary" onClick={() => setActiveTab('create-listing')}>
           <PlusCircle size={18} /> Post Material
         </button>
 
         {currentUser ? (
           <div
-            onClick={() => setActiveTab('auth')}
+            onClick={() => setActiveTab('profile')}
             style={{
               display: 'flex',
               alignItems: 'center',
