@@ -262,8 +262,8 @@ export default function MarketplacePage() {
   return (
     <div>
       {/* Clean Header Bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
+      <div className="marketplace-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', gap: '16px' }}>
+        <div className="marketplace-header-copy">
           <h2 style={{ fontSize: '1.8rem', color: '#0F172A', fontWeight: '800' }}>
             Geo-Proximity B2B Marketplace 📍
           </h2>
@@ -273,7 +273,7 @@ export default function MarketplacePage() {
         </div>
 
         {/* Search Radius Slider & Distance Preset Buttons */}
-        <div style={{
+        <div className="marketplace-radius-controls" style={{
           background: 'white',
           padding: '10px 16px',
           borderRadius: '12px',
@@ -282,7 +282,8 @@ export default function MarketplacePage() {
           alignItems: 'center',
           gap: '14px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-          flexWrap: 'wrap'
+          flexWrap: 'wrap',
+          flexShrink: 0
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <MapPin size={16} color="#10B981" />
