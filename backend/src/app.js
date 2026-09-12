@@ -9,6 +9,7 @@ import { isNeonConnected, getNeonClient } from './config/neonDb.js';
 import { detectMaterialFromImage } from './services/imageDetectionService.js';
 import {
   createInquiry,
+  deleteInquiriesForListing,
   getInquiriesForUser,
   updateInquiryStatus,
   getMessages,
@@ -590,15 +591,17 @@ app.delete('/api/v1/listings/:id', async (req, res) => {
     return res.status(403).json({ error: 'Only the listing owner can delete this listing.' });
   }
   const [deleted] = listings.splice(index, 1);
-  await saveDatabase(listings);
+  try {
+    await deleteInquiriesForListing(req.params.id);
+    await saveDatabase(listings);
 
-  const client = getNeonClient();
-  if (client) {
-    try {
+    const client = getNeonClient();
+    if (client) {
       await client`DELETE FROM listings WHERE id = ${String(req.params.id)}`;
-    } catch (e) {
-      console.error('[Neon DB Delete Error]:', e.message);
     }
+  } catch (error) {
+    console.error('[Listing delete failed]:', error.message);
+    return res.status(500).json({ error: 'The material could not be deleted completely. Please retry after checking the database connection.' });
   }
 
   console.log(`[API] Material listing deleted by @${req.body.username}: ID ${deleted.id}`);
