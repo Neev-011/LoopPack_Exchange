@@ -65,5 +65,31 @@
     "securityAnswer": "mehona",
     "createdAt": "2026-09-12T10:27:05.210Z",
     "updatedAt": "2026-09-12T12:40:15.537Z"
+  },
+  {
+    "id": "usr_1789229975786",
+    "username": "express_freight_99",
+    "companyName": "Express Freight Logistics",
+    "email": "info@expressfreight.com",
+    "password": "password123",
+    "role": "logistics",
+    "roleLabel": "Fleet / Backhaul Logistics Partner",
+    "industry": "Logistics & Freight",
+    "securityQuestion": "What is your company's founding hub city?",
+    "securityAnswer": "mumbai",
+    "createdAt": "2026-09-12T16:19:35.786Z"
+  },
+  {
+    "id": "usr_1789229990119",
+    "username": "neev_supplier",
+    "companyName": "Neev Packaging Hub",
+    "email": "neev@supplier.com",
+    "password": "password123",
+    "role": "supplier",
+    "roleLabel": "Packaging Generator / Supplier",
+    "industry": "Manufacturing & Logistics",
+    "securityQuestion": "What is your company's founding hub city?",
+    "securityAnswer": "",
+    "createdAt": "2026-09-12T16:19:50.119Z"
   }
 ]
