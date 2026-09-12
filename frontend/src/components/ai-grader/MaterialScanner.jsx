@@ -190,15 +190,20 @@ export default function MaterialScanner({ onScanned }) {
       setScanProgress(100);
       setIsScanning(false);
       const detected = validateAndDetectMaterial(fileName);
-      setResult(detected);
-      if (onScanned) onScanned(detected);
+      const fullResult = {
+        ...detected,
+        image: uploadedImage
+      };
+      setResult(fullResult);
+      if (onScanned) onScanned(fullResult);
     }, 1800);
   };
 
   const handleOverrideMaterial = (matType) => {
     const updated = MATERIAL_PRESETS_DATA[matType] || MATERIAL_PRESETS_DATA.cardboard;
-    setResult(updated);
-    if (onScanned) onScanned(updated);
+    const fullResult = { ...updated, image: uploadedImage };
+    setResult(fullResult);
+    if (onScanned) onScanned(fullResult);
   };
 
   return (
