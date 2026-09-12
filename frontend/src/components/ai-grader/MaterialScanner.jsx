@@ -83,9 +83,9 @@ const MATERIAL_PRESETS_DATA = {
     isPackaging: false,
     detectedType: 'unrecognized',
     materialName: 'Unrecognized / Non-Packaging Object',
-    confidence: '99.1% Non-Packaging',
+    confidence: 'Needs manual review',
     suggestedGrade: 'REJECTED',
-    suggestedGradeReason: 'Image contains non-industrial items (consumer goods/personal items). Marketplace listing disabled.',
+    suggestedGradeReason: 'The local classifier could not confidently identify a supported packaging material from this photo.',
     integrity: 0,
     contamination: 100,
     reuseRating: 'Not suitable for B2B circular exchange',
@@ -104,15 +104,10 @@ export default function MaterialScanner({ onScanned }) {
   const [result, setResult] = useState(null);
   const [showAngleGuide, setShowAngleGuide] = useState(false);
 
-  const validateAndDetectMaterial = (fname = '') => {
+  // Filenames are only useful hints. They must never be used to reject an image
+  // or to claim a high-confidence visual classification.
+  const detectMaterialFromFilenameHint = (fname = '') => {
     const lower = fname.toLowerCase();
-
-    const invalidKeywords = ['cat', 'dog', 'pet', 'shoe', 'car', 'person', 'food', 'selfie', 'avatar', 'random', 'landscape', 'furniture'];
-    for (const kw of invalidKeywords) {
-      if (lower.includes(kw)) {
-        return MATERIAL_PRESETS_DATA.rejected;
-      }
-    }
 
     if (lower.includes('pallet') || lower.includes('epal') || lower.includes('wood')) {
       return MATERIAL_PRESETS_DATA.pallet;
@@ -127,7 +122,7 @@ export default function MaterialScanner({ onScanned }) {
       return MATERIAL_PRESETS_DATA.cardboard;
     }
 
-    return MATERIAL_PRESETS_DATA.cardboard;
+    return MATERIAL_PRESETS_DATA.rejected;
   };
 
   const handleImageUpload = (e) => {
@@ -174,7 +169,7 @@ export default function MaterialScanner({ onScanned }) {
     setIsScanning(true);
     setResult(null);
     setScanProgress(15);
-    setScanStepText('Running YOLOv8 Object Verification & Bounding Box Check...');
+    setScanStepText('Analyzing photo and checking supported packaging hints...');
 
     setTimeout(() => {
       setScanProgress(55);
@@ -189,7 +184,7 @@ export default function MaterialScanner({ onScanned }) {
     setTimeout(() => {
       setScanProgress(100);
       setIsScanning(false);
-      const detected = validateAndDetectMaterial(fileName);
+      const detected = detectMaterialFromFilenameHint(fileName);
       const fullResult = {
         ...detected,
         image: uploadedImage
@@ -248,7 +243,7 @@ export default function MaterialScanner({ onScanned }) {
               AI Vision Material Classifier & Verification
             </h3>
             <p style={{ fontSize: '0.82rem', color: '#94A3B8' }}>
-              Upload packaging photo for automated AI computer vision classification
+              Upload a packaging photo for local classification and manual verification
             </p>
           </div>
         </div>
@@ -651,14 +646,40 @@ export default function MaterialScanner({ onScanned }) {
                       <ShieldAlert size={20} /> Packaging Verification Failed
                     </div>
                     <div style={{ fontSize: '0.92rem', fontWeight: '700', color: 'white', marginBottom: '6px' }}>
-                      Unrecognized / Non-Packaging Item
+                      Material Could Not Be Verified
                     </div>
                     <p style={{ fontSize: '0.84rem', color: '#FCA5A5', marginBottom: '14px' }}>
-                      The AI model determined that this photo does not match commercial B2B packaging waste (cardboard, pallets, drums, or shrink wrap).
+                      The local classifier could not confidently identify cardboard, pallets, drums, or shrink wrap from this photo. If the photo is valid, choose its category below to continue.
                     </p>
 
                     <div style={{ fontSize: '0.78rem', background: 'rgba(0,0,0,0.3)', padding: '8px 12px', borderRadius: '6px', color: '#CBD5E1', marginBottom: '14px' }}>
-                      ⚠️ Marketplace listing disabled to protect buyer quality & prevent spam.
+                      ⚠️ Automatic listing is paused until the material category is confirmed.
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      {[
+                        ['cardboard', 'Cardboard'],
+                        ['pallet', 'Wooden Pallet'],
+                        ['hdpe', 'HDPE Drum'],
+                        ['ldpe', 'LDPE Wrap']
+                      ].map(([type, label]) => (
+                        <button
+                          key={type}
+                          type="button"
+                          onClick={() => handleOverrideMaterial(type)}
+                          style={{
+                            padding: '7px 10px',
+                            borderRadius: '6px',
+                            border: '1px solid #10B981',
+                            background: 'rgba(16,185,129,0.12)',
+                            color: '#A7F3D0',
+                            fontSize: '0.76rem',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )}
