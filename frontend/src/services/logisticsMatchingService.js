@@ -1,4 +1,4 @@
-function materialWeightTons(quantity, unit) {
+export function materialWeightTons(quantity, unit) {
   const normalizedUnit = String(unit || '').toLowerCase();
   if (normalizedUnit.includes('kg')) return Number(quantity) / 1000;
   if (normalizedUnit.includes('pallet')) return Number(quantity) * 0.02;
@@ -19,9 +19,7 @@ function hasSharedLocationToken(first, second) {
 function getRouteScore(sellerLocation, buyerDestination, vehicle) {
   const pickupMatch = hasSharedLocationToken(sellerLocation, vehicle.originCity);
   const destinationMatch = hasSharedLocationToken(buyerDestination, vehicle.destinationCity);
-  if (pickupMatch && destinationMatch) return 30;
-  if (pickupMatch || destinationMatch) return 15;
-  return 0;
+  return pickupMatch && destinationMatch ? 30 : 0;
 }
 
 function isDateCompatible(requiredDate, availableDate) {

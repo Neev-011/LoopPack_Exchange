@@ -5,6 +5,21 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeAvoidedCarbon } from './services/carbonEngineService.js';
 import { searchListingsPostGIS, geocodeLocation } from './services/spatialService.js';
+
+function isValidCoordinatePair(value) {
+  return Number.isFinite(Number(value?.lat))
+    && Number.isFinite(Number(value?.lon))
+    && Number(value.lat) >= -90
+    && Number(value.lat) <= 90
+    && Number(value.lon) >= -180
+    && Number(value.lon) <= 180;
+}
+
+function addressToLocationText(address, fallback) {
+  return [address?.streetArea, address?.landmark, address?.city, address?.state]
+    .filter(Boolean)
+    .join(', ') || fallback;
+}
 import { isNeonConnected, getNeonClient } from './config/neonDb.js';
 import { detectMaterialFromImage } from './services/imageDetectionService.js';
 import {
@@ -27,6 +42,7 @@ import {
 } from './services/authService.js';
 import { getCompletedExchanges, recordCompletedExchange } from './services/exchangeService.js';
 import { solveOptimizedBackhaulRoute } from './services/vrpSolverService.js';
+import { rankLogisticsCandidates } from './services/logisticsCandidateMatchingService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -827,6 +843,20 @@ app.post('/api/v1/logistics/optimize-route', async (req, res) => {
 });
 
 // 7. Logistics Fleet Truck Endpoints
+app.post('/api/v1/trucks/match', async (req, res) => {
+  try {
+    const { vehicles, shipment, options } = req.body || {};
+    if (!Array.isArray(vehicles) || !shipment) {
+      return res.status(400).json({ error: 'Vehicles and shipment details are required.' });
+    }
+    const candidates = await rankLogisticsCandidates({ vehicles, shipment, options });
+    res.json({ status: 'success', data: candidates });
+  } catch (err) {
+    console.error('[Logistics Candidate Matching Error]:', err.message);
+    res.status(500).json({ error: 'Could not evaluate logistics candidates.' });
+  }
+});
+
 app.get('/api/v1/trucks', async (req, res) => {
   const client = getNeonClient();
   if (client) {
@@ -845,6 +875,18 @@ app.get('/api/v1/trucks', async (req, res) => {
         destinationCity: r.destination_city,
         pickupAddress: r.pickup_address,
         deliveryAddress: r.delivery_address,
+        originCoordinates: isValidCoordinatePair({ lat: r.origin_latitude, lon: r.origin_longitude })
+          ? { lat: Number(r.origin_latitude), lon: Number(r.origin_longitude) }
+          : null,
+        destinationCoordinates: isValidCoordinatePair({ lat: r.destination_latitude, lon: r.destination_longitude })
+          ? { lat: Number(r.destination_latitude), lon: Number(r.destination_longitude) }
+          : null,
+        originLatitude: isValidCoordinatePair({ lat: r.origin_latitude, lon: r.origin_longitude }) ? Number(r.origin_latitude) : null,
+        originLongitude: isValidCoordinatePair({ lat: r.origin_latitude, lon: r.origin_longitude }) ? Number(r.origin_longitude) : null,
+        destinationLatitude: isValidCoordinatePair({ lat: r.destination_latitude, lon: r.destination_longitude }) ? Number(r.destination_latitude) : null,
+        destinationLongitude: isValidCoordinatePair({ lat: r.destination_latitude, lon: r.destination_longitude }) ? Number(r.destination_longitude) : null,
+        routeCoordinatesAvailable: isValidCoordinatePair({ lat: r.origin_latitude, lon: r.origin_longitude })
+          && isValidCoordinatePair({ lat: r.destination_latitude, lon: r.destination_longitude }),
         availableDate: r.available_date,
         availableTime: r.available_time,
         ratePerKm: Number(r.rate_per_km),
@@ -869,9 +911,9 @@ app.get('/api/v1/trucks', async (req, res) => {
   res.json({
     total: 3,
     data: [
-      { id: 'trk_1', truckName: 'Tata 407 2.5T EV Container', vehicleReg: 'MH-04-FK-8492', capacityTons: 2.5, originCity: 'Mahape, Navi Mumbai', destinationCity: 'Bhiwandi Gateway', availableDate: 'Available Today', ratePerKm: 28, driverName: 'Ramesh Sharma', driverPhone: '+91 98201 48291', status: 'available', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() },
-      { id: 'trk_2', truckName: 'Eicher 11.10 6.0T High Deck CNG', vehicleReg: 'MH-12-PQ-3104', capacityTons: 6.0, originCity: 'Goregaon East', destinationCity: 'Kurla Yard', availableDate: 'Available Tomorrow', ratePerKm: 42, driverName: 'Suresh Kumar', driverPhone: '+91 97182 39102', status: 'available', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() },
-      { id: 'trk_3', truckName: 'Ashok Leyland Boss 4.5T EV Container', vehicleReg: 'MH-43-BB-9182', capacityTons: 4.5, originCity: 'Thane West', destinationCity: 'Taloja MIDC', availableDate: 'Available Today', ratePerKm: 36, driverName: 'Vikram Singh', driverPhone: '+91 98334 19283', status: 'in_transit', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() }
+      { id: 'trk_1', truckName: 'Tata 407 2.5T EV Container', vehicleReg: 'MH-04-FK-8492', capacityTons: 2.5, originCity: 'Mahape, Navi Mumbai', destinationCity: 'Bhiwandi Gateway', originCoordinates: { lat: 19.115, lon: 73.015 }, destinationCoordinates: { lat: 19.2968, lon: 73.0631 }, availableDate: 'Available Today', ratePerKm: 28, driverName: 'Ramesh Sharma', driverPhone: '+91 98201 48291', status: 'available', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() },
+      { id: 'trk_2', truckName: 'Eicher 11.10 6.0T High Deck CNG', vehicleReg: 'MH-12-PQ-3104', capacityTons: 6.0, originCity: 'Goregaon East', destinationCity: 'Kurla Yard', originCoordinates: { lat: 19.1663, lon: 72.8526 }, destinationCoordinates: { lat: 19.065, lon: 72.879 }, availableDate: 'Available Tomorrow', ratePerKm: 42, driverName: 'Suresh Kumar', driverPhone: '+91 97182 39102', status: 'available', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() },
+      { id: 'trk_3', truckName: 'Ashok Leyland Boss 4.5T EV Container', vehicleReg: 'MH-43-BB-9182', capacityTons: 4.5, originCity: 'Thane West', destinationCity: 'Taloja MIDC', originCoordinates: { lat: 19.2183, lon: 72.9781 }, destinationCoordinates: { lat: 19.0622, lon: 73.1114 }, availableDate: 'Available Today', ratePerKm: 36, driverName: 'Vikram Singh', driverPhone: '+91 98334 19283', status: 'in_transit', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() }
     ]
   });
 });
@@ -894,10 +936,12 @@ app.post('/api/v1/trucks', async (req, res) => {
     companyName,
     companyEmail,
     lat,
-    lon
+    lon,
+    originCoordinates,
+    destinationCoordinates
   } = req.body;
 
-  if (!truckName || !vehicleReg || !originCity || !destinationCity || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) {
+  if (!truckName || !vehicleReg || !originCity || !destinationCity) {
     return res.status(400).json({ error: 'Truck Name, Vehicle Registration, Origin City, and Destination City are required.' });
   }
 
@@ -907,9 +951,23 @@ app.post('/api/v1/trucks', async (req, res) => {
   if (req.body?.role !== 'logistics') {
     return res.status(403).json({ error: 'Only logistics accounts can list and manage rides.' });
   }
+  if (originCoordinates !== undefined && !isValidCoordinatePair(originCoordinates)) {
+    return res.status(400).json({ error: 'Origin coordinates must contain valid latitude and longitude values.' });
+  }
+  if (destinationCoordinates !== undefined && !isValidCoordinatePair(destinationCoordinates)) {
+    return res.status(400).json({ error: 'Destination coordinates must contain valid latitude and longitude values.' });
+  }
 
   const cleanCap = Math.max(0.5, Number(capacityTons) || 1);
   const cleanRate = Math.max(0, Number(ratePerKm) || 0);
+  const originText = addressToLocationText(pickupAddress, originCity);
+  const destinationText = addressToLocationText(deliveryAddress, destinationCity);
+  const resolvedOrigin = isValidCoordinatePair(originCoordinates)
+    ? { lat: Number(originCoordinates.lat), lon: Number(originCoordinates.lon) }
+    : await geocodeLocation(originText, { allowSyntheticFallback: false });
+  const resolvedDestination = isValidCoordinatePair(destinationCoordinates)
+    ? { lat: Number(destinationCoordinates.lat), lon: Number(destinationCoordinates.lon) }
+    : await geocodeLocation(destinationText, { allowSyntheticFallback: false });
 
   const newTruck = {
     id: `trk_${Date.now()}`,
@@ -929,8 +987,15 @@ app.post('/api/v1/trucks', async (req, res) => {
     createdBy,
     companyName,
     companyEmail: companyEmail || 'dispatch@logistics.com',
-    lat: Number(lat),
-    lon: Number(lon),
+    lat: resolvedOrigin?.lat ?? (isValidCoordinatePair({ lat, lon }) ? Number(lat) : null),
+    lon: resolvedOrigin?.lon ?? (isValidCoordinatePair({ lat, lon }) ? Number(lon) : null),
+    originCoordinates: resolvedOrigin,
+    destinationCoordinates: resolvedDestination,
+    routeCoordinatesAvailable: Boolean(resolvedOrigin && resolvedDestination),
+    originLatitude: resolvedOrigin?.lat ?? null,
+    originLongitude: resolvedOrigin?.lon ?? null,
+    destinationLatitude: resolvedDestination?.lat ?? null,
+    destinationLongitude: resolvedDestination?.lon ?? null,
     locationUpdatedAt: new Date().toISOString(),
     createdAt: new Date().toISOString()
   };
@@ -940,12 +1005,12 @@ app.post('/api/v1/trucks', async (req, res) => {
     try {
       await client`
         INSERT INTO trucks (
-          id, truck_name, vehicle_reg, capacity_tons, origin_city, destination_city, pickup_address, delivery_address, available_date, available_time, rate_per_km, driver_name, driver_phone, status, created_by, company_name, company_email, lat, lon, location_updated_at, created_at
+          id, truck_name, vehicle_reg, capacity_tons, origin_city, destination_city, pickup_address, delivery_address, available_date, available_time, rate_per_km, driver_name, driver_phone, status, created_by, company_name, company_email, lat, lon, origin_latitude, origin_longitude, destination_latitude, destination_longitude, location_updated_at, created_at
         ) VALUES (
           ${newTruck.id}, ${newTruck.truckName}, ${newTruck.vehicleReg}, ${newTruck.capacityTons},
           ${newTruck.originCity}, ${newTruck.destinationCity}, ${newTruck.pickupAddress ? JSON.stringify(newTruck.pickupAddress) : null}, ${newTruck.deliveryAddress ? JSON.stringify(newTruck.deliveryAddress) : null}, ${newTruck.availableDate}, ${newTruck.availableTime}, ${newTruck.ratePerKm},
           ${newTruck.driverName}, ${newTruck.driverPhone}, ${newTruck.status}, ${newTruck.createdBy},
-          ${newTruck.companyName}, ${newTruck.companyEmail}, ${newTruck.lat}, ${newTruck.lon}, ${newTruck.locationUpdatedAt}, ${newTruck.createdAt}
+          ${newTruck.companyName}, ${newTruck.companyEmail}, ${newTruck.lat}, ${newTruck.lon}, ${newTruck.originCoordinates?.lat ?? null}, ${newTruck.originCoordinates?.lon ?? null}, ${newTruck.destinationCoordinates?.lat ?? null}, ${newTruck.destinationCoordinates?.lon ?? null}, ${newTruck.locationUpdatedAt}, ${newTruck.createdAt}
         )
       `;
     } catch (err) {
