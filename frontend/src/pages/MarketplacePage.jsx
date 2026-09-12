@@ -693,7 +693,7 @@ export default function MarketplacePage() {
                 <h4 style={{ fontSize: '0.88rem', textTransform: 'uppercase', color: '#475569', fontWeight: '800', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Building2 size={16} color="#10B981" /> Verified Seller & Origin Specifications
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', fontSize: '0.88rem', color: '#334155', marginBottom: '14px' }}>
+                <div className="responsive-grid-2" style={{ gap: '14px', fontSize: '0.88rem', color: '#334155', marginBottom: '14px' }}>
                   <div>
                     <span style={{ color: '#64748B', display: 'block', fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase' }}>SELLER ORGANIZATION</span>
                     <strong style={{ color: '#0F172A', fontSize: '0.95rem' }}>{selectedProduct.companyName || 'B2B Circular Partner'}</strong>
