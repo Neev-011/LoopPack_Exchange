@@ -185,6 +185,10 @@ export default function MarketplacePage() {
       setOrderError('Please sign in before reserving material.');
       return;
     }
+    if (!['supplier', 'buyer'].includes(currentUser.role)) {
+      setOrderError('Only Buyer / Seller Organization accounts can purchase materials.');
+      return;
+    }
     const selectedTruck = AVAILABLE_BACKHAUL_TRUCKS.find(truck => truck.id === selectedTruckId);
     if (!selectedTruck) {
       setOrderError('Select an empty-return truck before reserving material.');
@@ -202,7 +206,8 @@ export default function MarketplacePage() {
             id: currentUser.id,
             username: currentUser.username,
             companyName: currentUser.companyName,
-            email: currentUser.email
+            email: currentUser.email,
+            role: currentUser.role
           },
           quantity: Number(orderDetails.quantity),
           destination: orderDetails.destination,
@@ -227,6 +232,10 @@ export default function MarketplacePage() {
       setClaimedItem({ title: 'Please sign in before contacting a seller.', location: 'B2B Account' });
       return;
     }
+    if (!['supplier', 'buyer'].includes(currentUser.role)) {
+      setClaimedItem({ title: 'Only Buyer / Seller Organization accounts can contact sellers.', location: 'Inquiry' });
+      return;
+    }
     try {
       const response = await fetch(`${API_BASE_URL}/inquiries`, {
         method: 'POST',
@@ -236,6 +245,7 @@ export default function MarketplacePage() {
           userId: currentUser.id,
           username: currentUser.username,
           companyName: currentUser.companyName,
+          role: currentUser.role,
           message: inquiryMessage,
           quantity: selectedProduct.quantity
         })

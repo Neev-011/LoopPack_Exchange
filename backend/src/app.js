@@ -49,12 +49,20 @@ function requestUser(req) {
   return {
     id: req.body?.userId,
     username: req.body?.username,
-    companyName: req.body?.companyName
+    companyName: req.body?.companyName,
+    role: req.body?.role
   };
+}
+
+function isCommercialRole(role) {
+  return role === 'supplier' || role === 'buyer';
 }
 
 app.post('/api/v1/inquiries', async (req, res) => {
   try {
+    if (!isCommercialRole(req.body?.role)) {
+      return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can contact sellers.' });
+    }
     const inquiry = await createInquiry({
       listing: req.body?.listing,
       buyer: requestUser(req),
@@ -69,8 +77,12 @@ app.post('/api/v1/inquiries', async (req, res) => {
 
 app.get('/api/v1/inquiries', async (req, res) => {
   try {
+    const requestedView = req.query.role === 'seller' ? 'seller' : 'buyer';
+    if (!isCommercialRole(req.query.userRole)) {
+      return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can view inquiries.' });
+    }
     const user = { id: req.query.userId, username: req.query.username, companyName: req.query.companyName };
-    res.json({ data: await getInquiriesForUser(user, req.query.role === 'seller' ? 'seller' : 'buyer') });
+    res.json({ data: await getInquiriesForUser(user, requestedView) });
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
   }
@@ -78,6 +90,9 @@ app.get('/api/v1/inquiries', async (req, res) => {
 
 app.patch('/api/v1/inquiries/:id', async (req, res) => {
   try {
+    if (!isCommercialRole(req.body?.role)) {
+      return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can manage inquiries.' });
+    }
     const item = await updateInquiryStatus(req.params.id, requestUser(req), req.body?.status);
     res.json({ status: 'success', data: item });
   } catch (err) {
@@ -86,6 +101,9 @@ app.patch('/api/v1/inquiries/:id', async (req, res) => {
 });
 
 app.patch('/api/v1/listings/:id', async (req, res) => {
+  if (!isCommercialRole(req.body?.role)) {
+    return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can edit listings.' });
+  }
   const listings = await getListings();
   const index = listings.findIndex(item => String(item.id) === String(req.params.id));
   if (index === -1) return res.status(404).json({ error: 'Listing not found.' });
@@ -125,7 +143,7 @@ app.patch('/api/v1/listings/:id', async (req, res) => {
 
 app.get('/api/v1/inquiries/:id/messages', async (req, res) => {
   try {
-    const user = { id: req.query.userId, username: req.query.username, companyName: req.query.companyName };
+    const user = { id: req.query.userId, username: req.query.username, companyName: req.query.companyName, role: req.query.role };
     res.json({ data: await getMessages(req.params.id, user) });
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
@@ -164,6 +182,9 @@ app.post('/api/v1/exchanges/completed', async (req, res) => {
 app.post('/api/v1/orders', async (req, res) => {
   try {
     const { listingId, buyer, quantity, destination, paymentMethod } = req.body || {};
+    if (!isCommercialRole(buyer?.role)) {
+      return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can purchase materials.' });
+    }
     if (!buyer?.id || !buyer?.username || !buyer?.companyName || !buyer?.email) {
       return res.status(401).json({ error: 'Sign in with a complete buyer profile before reserving material.' });
     }
@@ -451,6 +472,9 @@ app.post('/api/v1/listings', async (req, res) => {
   if (!createdBy || !companyName) {
     return res.status(401).json({ error: 'Sign in before posting so you can manage your listing and buyer inquiries.' });
   }
+  if (!isCommercialRole(req.body?.role)) {
+    return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can post materials.' });
+  }
 
   const numQty = Number(quantity);
   if (isNaN(numQty) || numQty <= 0) {
@@ -480,7 +504,7 @@ app.post('/api/v1/listings', async (req, res) => {
     description: description || 'Verified circular packaging material lot.',
     createdBy,
     companyName,
-    ownerRole: ownerRole || 'Packaging Supplier',
+    ownerRole: ownerRole || 'Buyer / Seller Organization',
     createdByEmail: createdByEmail || 'contact@looppack.io',
     image: image || (materialType === 'pallet' 
       ? 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?auto=format&fit=crop&w=600&q=80'
@@ -509,6 +533,9 @@ app.post('/api/v1/listings', async (req, res) => {
 });
 
 app.delete('/api/v1/listings/:id', async (req, res) => {
+  if (!isCommercialRole(req.body?.role)) {
+    return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can delete listings.' });
+  }
   const listings = await getListings();
   const index = listings.findIndex(item => String(item.id) === String(req.params.id));
   if (index === -1) {
@@ -542,6 +569,9 @@ app.post('/api/v1/carbon/calculate', (req, res) => {
 
 // 6. Google OR-Tools & OSRM VRP Logistics Backhaul Route Optimizer Endpoint
 app.post('/api/v1/logistics/optimize-route', async (req, res) => {
+  if (req.body?.role !== 'logistics') {
+    return res.status(403).json({ error: 'Only logistics accounts can optimize delivery rides.' });
+  }
   try {
     const { pickups, depot, dropFacility, originCity, destinationCity } = req.body || {};
 
@@ -694,6 +724,9 @@ app.post('/api/v1/trucks', async (req, res) => {
   if (!createdBy || !companyName) {
     return res.status(401).json({ error: 'Sign in with a registered Logistics Carrier account before listing a truck.' });
   }
+  if (req.body?.role !== 'logistics') {
+    return res.status(403).json({ error: 'Only logistics accounts can list and manage rides.' });
+  }
 
   const cleanCap = Math.max(0.5, Number(capacityTons) || 1);
   const cleanRate = Math.max(0, Number(ratePerKm) || 0);
@@ -744,7 +777,10 @@ app.post('/api/v1/trucks', async (req, res) => {
 });
 
 app.delete('/api/v1/trucks/:id', async (req, res) => {
-  const { username } = req.body || {};
+  const { username, role } = req.body || {};
+  if (role !== 'logistics') {
+    return res.status(403).json({ error: 'Only logistics accounts can remove rides.' });
+  }
   const client = getNeonClient();
   if (client) {
     try {
@@ -755,6 +791,25 @@ app.delete('/api/v1/trucks/:id', async (req, res) => {
     }
   }
   res.json({ status: 'success', message: 'Truck listing deleted.' });
+});
+
+app.patch('/api/v1/trucks/:id/status', async (req, res) => {
+  const { username, role, status } = req.body || {};
+  if (role !== 'logistics') {
+    return res.status(403).json({ error: 'Only logistics accounts can accept or reject rides.' });
+  }
+  if (!['accepted', 'rejected', 'available'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid ride status.' });
+  }
+  const client = getNeonClient();
+  if (!client) return res.status(503).json({ error: 'Database is unavailable.' });
+  const rows = await client`
+    UPDATE trucks SET status = ${status}
+    WHERE id = ${req.params.id} AND created_by = ${username}
+    RETURNING id, status
+  `;
+  if (!rows.length) return res.status(404).json({ error: 'Ride not found or not owned by this logistics account.' });
+  res.json({ status: 'success', data: rows[0] });
 });
 
 export default app;
