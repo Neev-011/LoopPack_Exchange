@@ -47,6 +47,7 @@ import { rankLogisticsCandidates } from './services/logisticsCandidateMatchingSe
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DB_FILE = path.join(__dirname, '../data/db.json');
+const ORDERS_FILE = path.join(__dirname, '../data/orders.json');
 
 const app = express();
 app.use(cors());
@@ -214,10 +215,30 @@ app.post('/api/v1/orders', async (req, res) => {
       return res.status(400).json({ error: 'A valid buyer delivery latitude and longitude are required.' });
     }
     const client = getNeonClient();
-    if (!client) return res.status(503).json({ error: 'Database is unavailable. The order was not created.' });
-    const rows = await client`SELECT * FROM listings WHERE id = ${String(listingId)} LIMIT 1`;
-    if (!rows.length) return res.status(404).json({ error: 'This material is no longer available.' });
-    const listing = rows[0];
+    const listingRows = client
+      ? await client`SELECT * FROM listings WHERE id = ${String(listingId)} LIMIT 1`
+      : (await getListings()).filter(item => String(item.id) === String(listingId));
+    if (!listingRows.length) return res.status(404).json({ error: 'This material is no longer available.' });
+    const sourceListing = listingRows[0];
+    const listing = {
+      id: sourceListing.id,
+      title: sourceListing.title,
+      material_type: sourceListing.material_type ?? sourceListing.materialType,
+      quantity: Number(sourceListing.quantity),
+      unit: sourceListing.unit,
+      grade: sourceListing.grade,
+      location: sourceListing.location,
+      lat: Number(sourceListing.lat),
+      lon: Number(sourceListing.lon),
+      price: Number(sourceListing.price) || 0,
+      created_by: sourceListing.created_by ?? sourceListing.createdBy,
+      company_name: sourceListing.company_name ?? sourceListing.companyName,
+      owner_role: sourceListing.owner_role ?? sourceListing.ownerRole,
+      created_by_email: sourceListing.created_by_email ?? sourceListing.createdByEmail,
+      description: sourceListing.description,
+      image: sourceListing.image,
+      created_at: sourceListing.created_at ?? sourceListing.createdAt
+    };
     if (listing.created_by === buyer.username) return res.status(400).json({ error: 'You cannot purchase your own listing.' });
     const requestedQuantity = Number(quantity);
     if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0 || requestedQuantity > Number(listing.quantity)) {
@@ -268,7 +289,8 @@ app.post('/api/v1/orders', async (req, res) => {
       netCO2eAvoided: carbon.netCO2eAvoided,
       listingSnapshot: listing
     };
-    await client`
+    if (client) {
+      await client`
       INSERT INTO sales_orders (
         id, listing_id, listing_title, seller_username, buyer_id, buyer_username, buyer_company,
   buyer_email, quantity, unit, unit_price, total_price, destination, buyer_location, payment_method,
@@ -279,7 +301,12 @@ app.post('/api/v1/orders', async (req, res) => {
   ${order.unitPrice}, ${order.totalPrice}, ${order.destination}, ${JSON.stringify(order.buyerLocation)}, ${order.paymentMethod},
         ${order.pickupDate}, ${order.pickupTime}, ${order.deliveryAddress ? JSON.stringify(order.deliveryAddress) : null}, ${order.status}, ${order.logisticsStatus}, ${order.logisticsVehicle ? JSON.stringify(order.logisticsVehicle) : null}, ${JSON.stringify(order.logisticsCandidates)}, ${JSON.stringify(order.logisticsRequestHistory)}, ${order.transportDistanceKm}, ${order.transportEmissionsKg}, ${order.netCO2eAvoided}, ${JSON.stringify(order.listingSnapshot)}
       )
-    `;
+      `;
+    } else {
+      const orders = readLocalOrders();
+      orders.unshift(order);
+      writeLocalOrders(orders);
+    }
     await recordCompletedExchange({
       listing: {
         id: listing.id,
@@ -294,7 +321,12 @@ app.post('/api/v1/orders', async (req, res) => {
       },
       buyer
     });
-    await client`DELETE FROM listings WHERE id = ${order.listingId}`;
+    if (client) {
+      await client`DELETE FROM listings WHERE id = ${order.listingId}`;
+    } else {
+      const listings = await getListings();
+      await saveDatabase(listings.filter(item => String(item.id) !== String(order.listingId)));
+    }
     res.status(201).json({ status: 'success', data: order });
   } catch (err) {
     console.error('[Orders] checkout failed:', err.message);
@@ -307,25 +339,47 @@ app.get('/api/v1/orders', async (req, res) => {
     const username = req.query.username;
     if (!username) return res.status(401).json({ error: 'A signed-in user is required.' });
     const client = getNeonClient();
-    if (!client) return res.json({ data: [] });
-    const rows = req.query.role === 'buyer'
-      ? await client`SELECT * FROM sales_orders WHERE buyer_username = ${username} ORDER BY created_at DESC`
-      : req.query.role === 'logistics'
-        ? await client`SELECT * FROM sales_orders WHERE logistics_vehicle->>'createdBy' = ${username} ORDER BY created_at DESC`
-        : await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`;
-    res.json({ data: rows.map(row => ({
-      id: row.id, listingId: row.listing_id, listingTitle: row.listing_title,
-      sellerUsername: row.seller_username, buyerId: row.buyer_id, buyerUsername: row.buyer_username,
-      buyerCompany: row.buyer_company, buyerEmail: row.buyer_email, quantity: Number(row.quantity),
-      unit: row.unit, unitPrice: Number(row.unit_price), totalPrice: Number(row.total_price),
-      destination: row.destination, deliveryAddress: row.delivery_address, paymentMethod: row.payment_method, status: row.status,
-  buyerLocation: row.buyer_location,
-      pickupDate: row.pickup_date, pickupTime: row.pickup_time, logisticsStatus: row.logistics_status, logisticsVehicle: row.logistics_vehicle,
-      logisticsCandidates: row.logistics_candidates, logisticsRequestHistory: row.logistics_request_history,
-      transportDistanceKm: Number(row.transport_distance_km), transportEmissionsKg: Number(row.transport_emissions_kg),
-      netCO2eAvoided: Number(row.net_co2e_avoided),
-      listingSnapshot: row.listing_snapshot, createdAt: row.created_at
-    })) });
+    let rows = client
+      ? req.query.role === 'buyer'
+        ? await client`SELECT * FROM sales_orders WHERE buyer_username = ${username} ORDER BY created_at DESC`
+        : req.query.role === 'logistics'
+          ? await client`SELECT * FROM sales_orders WHERE logistics_vehicle->>'createdBy' = ${username} ORDER BY created_at DESC`
+          : await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`
+      : readLocalOrders()
+        .filter(row => req.query.role === 'buyer'
+          ? row.buyerUsername === username
+          : req.query.role === 'logistics'
+            ? row.logisticsVehicle?.createdBy === username
+            : row.sellerUsername === username)
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      if (client && req.query.role === 'buyer') {
+        const historicalExchanges = await client`
+          SELECT * FROM completed_exchanges
+          WHERE buyer_username = ${username}
+          ORDER BY completed_at DESC
+        `;
+        const orderListingIds = new Set(rows.map(row => String(row.listing_id ?? row.listingId)));
+        const recoveredOrders = historicalExchanges
+          .filter(exchange => !orderListingIds.has(String(exchange.listing_id ?? exchange.listingId)))
+          .map(exchange => ({
+            id: `legacy_${exchange.id}`,
+            listingId: exchange.listing_id ?? exchange.listingId,
+            listingTitle: exchange.listing_title ?? exchange.listingTitle,
+            buyerUsername: username,
+            quantity: exchange.quantity,
+            unit: exchange.unit,
+            totalPrice: null,
+            destination: null,
+            paymentMethod: null,
+            status: 'completed',
+            logisticsStatus: null,
+            logisticsRequestHistory: [],
+            createdAt: exchange.completed_at ?? exchange.completedAt,
+            recoveredFromExchange: true
+          }));
+        rows = [...rows, ...recoveredOrders];
+      }
+    res.json({ data: rows.map(row => normalizeOrder(row)) });
   } catch (err) {
     res.status(500).json({ error: 'Could not load completed sales.' });
   }
@@ -419,6 +473,56 @@ function readDatabase() {
     console.error('Error reading DB file:', err);
     return [];
   }
+}
+
+function readLocalOrders() {
+  try {
+    if (!fs.existsSync(ORDERS_FILE)) return [];
+    return JSON.parse(fs.readFileSync(ORDERS_FILE, 'utf8') || '[]');
+  } catch (err) {
+    console.error('Error reading local orders:', err);
+    return [];
+  }
+}
+
+function writeLocalOrders(orders) {
+  const dir = path.dirname(ORDERS_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2), 'utf8');
+}
+
+function normalizeOrder(row) {
+  return {
+    id: row.id,
+    listingId: row.listing_id ?? row.listingId,
+    listingTitle: row.listing_title ?? row.listingTitle,
+    sellerUsername: row.seller_username ?? row.sellerUsername,
+    buyerId: row.buyer_id ?? row.buyerId,
+    buyerUsername: row.buyer_username ?? row.buyerUsername,
+    buyerCompany: row.buyer_company ?? row.buyerCompany,
+    buyerEmail: row.buyer_email ?? row.buyerEmail,
+    quantity: Number(row.quantity),
+    unit: row.unit,
+    unitPrice: Number(row.unit_price ?? row.unitPrice ?? 0),
+    totalPrice: Number(row.total_price ?? row.totalPrice ?? 0),
+    destination: row.destination,
+    deliveryAddress: row.delivery_address ?? row.deliveryAddress,
+    paymentMethod: row.payment_method ?? row.paymentMethod,
+    status: row.status,
+    buyerLocation: row.buyer_location ?? row.buyerLocation,
+    pickupDate: row.pickup_date ?? row.pickupDate,
+    pickupTime: row.pickup_time ?? row.pickupTime,
+    logisticsStatus: row.logistics_status ?? row.logisticsStatus,
+    logisticsVehicle: row.logistics_vehicle ?? row.logisticsVehicle,
+    logisticsCandidates: row.logistics_candidates ?? row.logisticsCandidates ?? [],
+    logisticsRequestHistory: row.logistics_request_history ?? row.logisticsRequestHistory ?? [],
+    transportDistanceKm: Number(row.transport_distance_km ?? row.transportDistanceKm),
+    transportEmissionsKg: Number(row.transport_emissions_kg ?? row.transportEmissionsKg),
+    netCO2eAvoided: Number(row.net_co2e_avoided ?? row.netCO2eAvoided),
+    listingSnapshot: row.listing_snapshot ?? row.listingSnapshot,
+    createdAt: row.created_at ?? row.createdAt,
+    recoveredFromExchange: Boolean(row.recovered_from_exchange ?? row.recoveredFromExchange)
+  };
 }
 
 async function initDatabaseSchema() {
@@ -616,10 +720,11 @@ app.get('/api/v1/listings', async (req, res) => {
   const radius = parseFloat(req.query.radiusKm) || 50;
   const owner = req.query.owner;
 
-  let results = searchListingsPostGIS(listings, lat, lon, radius);
-  if (owner) {
-    results = results.filter(item => (item.createdBy || '').toLowerCase() === owner.toLowerCase());
-  }
+  let results = owner
+    ? listings
+        .filter(item => (item.createdBy || '').toLowerCase() === owner.toLowerCase())
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+    : searchListingsPostGIS(listings, lat, lon, radius);
   res.json({ total: results.length, data: results });
 });
 

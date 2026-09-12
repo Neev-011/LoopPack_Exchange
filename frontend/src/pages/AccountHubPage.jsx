@@ -266,7 +266,7 @@ export default function AccountHubPage({ view = 'materials', setActiveTab }) {
       {view === 'purchases' && (
         <section style={{ background: 'white', padding: 24, borderRadius: 12, border: '1px solid #E2E8F0' }}>
           <h3>Purchase history</h3>
-          {purchases.length === 0 && <p style={{ color: '#64748B' }}>You have no completed purchases yet. Browse the marketplace to find packaging materials.</p>}
+          {purchases.length === 0 && <p style={{ color: '#64748B' }}>You have no purchases yet. Browse the marketplace to find packaging materials.</p>}
           {purchases.map(order => (
             <article key={order.id} style={{ border: '1px solid #D1FAE5', background: '#F0FDF4', borderRadius: 10, padding: 18, marginTop: 14 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
@@ -280,10 +280,10 @@ export default function AccountHubPage({ view = 'materials', setActiveTab }) {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10, marginTop: 16, color: '#334155', fontSize: 13 }}>
                 <div><strong>Quantity</strong><br />{order.quantity} {order.unit || 'units'}</div>
-                <div><strong>Total paid</strong><br />₹{Number(order.totalPrice || 0).toLocaleString()}</div>
-                <div><strong>Seller</strong><br />@{order.sellerUsername}</div>
-                <div><strong>Payment method</strong><br />{order.paymentMethod}</div>
-                <div><strong>Delivery destination</strong><br />{order.destination}</div>
+                <div><strong>Total paid</strong><br />{order.recoveredFromExchange ? 'Recorded exchange' : `₹${Number(order.totalPrice || 0).toLocaleString()}`}</div>
+                <div><strong>Seller</strong><br />{order.sellerUsername ? `@${order.sellerUsername}` : 'Details unavailable'}</div>
+                <div><strong>Payment method</strong><br />{order.paymentMethod || 'Not recorded'}</div>
+                <div><strong>Delivery destination</strong><br />{order.destination || 'Not recorded'}</div>
                 {order.logisticsVehicle && <div><strong>Selected logistics</strong><br />{order.logisticsVehicle.truckName} · {order.transportDistanceKm || order.logisticsVehicle.estimate?.distanceKm || 'Estimated'} km · {order.transportEmissionsKg || order.logisticsVehicle.estimate?.transportEmissionsKg || 0} kg CO₂e</div>}
                 {order.logisticsRequestHistory?.length > 0 && (
                   <div>

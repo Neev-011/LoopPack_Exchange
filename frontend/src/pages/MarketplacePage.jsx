@@ -196,6 +196,12 @@ export default function MarketplacePage() {
     fetchListings(maxRadius);
   }, [maxRadius, deviceLocation]);
 
+  useEffect(() => {
+    const refreshListings = () => fetchListings(maxRadius, deviceLocation);
+    window.addEventListener('looppack:listing-created', refreshListings);
+    return () => window.removeEventListener('looppack:listing-created', refreshListings);
+  }, [maxRadius, deviceLocation]);
+
   const useMyLocation = () => {
     if (!navigator.geolocation) {
       setLocationStatus('unsupported');

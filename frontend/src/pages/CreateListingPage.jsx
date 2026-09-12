@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import MaterialScanner from '../components/ai-grader/MaterialScanner';
 import LocationPicker from '../components/common/LocationPicker';
+import AddressForm from '../components/common/AddressForm';
 import { calculateAvoidedCarbon } from '../utils/carbonEngine';
 import { PlusCircle, MapPin, CheckCircle, Leaf, Loader2, RefreshCw, Sparkles, UserCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -15,7 +16,13 @@ export default function CreateListingPage({ setActiveTab }) {
   const [unit, setUnit] = useState('boxes');
   const [grade, setGrade] = useState('A');
   const [price, setPrice] = useState(12);
-  const [location, setLocation] = useState('Warehouse District, Sector 4');
+  const [pickupAddress, setPickupAddress] = useState({
+    state: 'Gujarat',
+    city: 'Morbi',
+    streetArea: 'Warehouse District, Sector 4',
+    landmark: ''
+  });
+  const [location, setLocation] = useState('Warehouse District, Sector 4, Morbi, Gujarat');
   const [description, setDescription] = useState('');
   const [scannedImage, setScannedImage] = useState(null);
   const [deviceLocation, setDeviceLocation] = useState(null);
@@ -23,6 +30,10 @@ export default function CreateListingPage({ setActiveTab }) {
   const [pickupLocationSet, setPickupLocationSet] = useState(false);
   const [locationStatus, setLocationStatus] = useState('loading');
   const [aiVerified, setAiVerified] = useState(false);
+
+  const formatPickupAddress = address => (
+    [address.streetArea, address.landmark, address.city, address.state].filter(Boolean).join(', ')
+  );
 
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -111,9 +122,21 @@ export default function CreateListingPage({ setActiveTab }) {
       setErrorMsg('Please sign in before posting a material so buyers can contact you and you can manage inquiries.');
       return;
     }
-    if (!pickupLocationSet || !pickupCoordinates || !Number.isFinite(Number(pickupCoordinates.lat)) || !Number.isFinite(Number(pickupCoordinates.lon))) {
-      setErrorMsg('Click “Set location and return to site” after choosing the exact pickup point.');
-      requestLocation();
+    const pickupLat = Number(pickupCoordinates?.lat);
+    const pickupLon = Number(pickupCoordinates?.lon);
+    const hasValidPickupCoordinates = Number.isFinite(pickupLat)
+      && Number.isFinite(pickupLon)
+      && pickupLat >= -90
+      && pickupLat <= 90
+      && pickupLon >= -180
+      && pickupLon <= 180;
+    const hasPickupAddress = Boolean(
+      pickupAddress.state.trim()
+      && pickupAddress.city.trim()
+      && pickupAddress.streetArea.trim()
+    );
+    if (!hasValidPickupCoordinates || !hasPickupAddress) {
+      setErrorMsg('Enter the pickup address and provide valid coordinates from the map or manually.');
       return;
     }
     if (!['supplier', 'buyer'].includes(currentUser.role)) {
@@ -139,8 +162,8 @@ export default function CreateListingPage({ setActiveTab }) {
       grade,
       price: cleanPrice,
       location,
-      lat: Number(pickupCoordinates.lat),
-      lon: Number(pickupCoordinates.lon),
+      lat: pickupLat,
+      lon: pickupLon,
       description: description || `Verified Grade ${grade} ${materialType} circular scrap lot ready for B2B pickup.`,
       image: scannedImage,
       createdBy: currentUser?.username,
@@ -168,6 +191,7 @@ export default function CreateListingPage({ setActiveTab }) {
 
       const data = await response.json();
       console.log('Listing created on backend API:', data);
+      window.dispatchEvent(new CustomEvent('looppack:listing-created', { detail: data.data }));
 
       setLoading(false);
       setSubmitted(true);
@@ -267,6 +291,21 @@ export default function CreateListingPage({ setActiveTab }) {
         onUseCurrentLocation={requestLocation}
         onSetLocation={() => setPickupLocationSet(true)}
         onLocationChange={() => setPickupLocationSet(false)}
+        addressContent={(
+          <div style={{ marginBottom: '9px' }}>
+            <AddressForm
+              value={pickupAddress}
+              onChange={address => {
+                setPickupAddress(address);
+                setLocation(formatPickupAddress(address));
+                setPickupLocationSet(false);
+              }}
+              idPrefix="listing-pickup-address"
+              required
+              compact
+            />
+          </div>
+        )}
       />
 
       <form onSubmit={handleSubmit} style={{ background: 'white', padding: '32px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
