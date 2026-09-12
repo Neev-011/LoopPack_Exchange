@@ -97,8 +97,8 @@ export async function registerUser({ username, companyName, email, password, rol
   const users = await readUsers();
   if (users.some(user => user.username.toLowerCase() === cleanUsername)) throw new Error(`Username "${cleanUsername}" is already registered. Please choose another username or sign in.`);
   if (users.some(user => user.email.toLowerCase() === cleanEmail)) throw new Error(`Corporate email "${cleanEmail}" is already linked to an account.`);
-  const roleLabels = { supplier: 'Packaging Supplier', buyer: 'Buyer / Recycler', logistics: 'Logistics Partner' };
-  const allowedRoles = Object.keys(roleLabels);
+  const roleLabels = { supplier: 'Buyer / Seller Organization', buyer: 'Buyer / Seller Organization', logistics: 'Logistics Partner' };
+  const allowedRoles = ['supplier', 'logistics'];
   if (!allowedRoles.includes(role)) throw new Error('Please choose a valid LoopPack usage role.');
   const user = { id: `usr_${Date.now()}`, username: cleanUsername, companyName: companyName.trim(), email: cleanEmail, password, role, roleLabel: roleLabels[role] || 'B2B Circular Packaging Partner', industry: industry.trim() || 'General Industrial', securityQuestion: securityQuestion.trim() || "What is your company's founding hub city?", securityAnswer: (securityAnswer || '').trim().toLowerCase(), createdAt: new Date().toISOString() };
   await saveUser(user);

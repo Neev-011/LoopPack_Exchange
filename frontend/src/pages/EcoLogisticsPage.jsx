@@ -82,7 +82,8 @@ export default function EcoLogisticsPage({ setActiveTab }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           originCity: targetOrigin,
-          destinationCity: targetDest
+          destinationCity: targetDest,
+          role: currentUser?.role
         })
       });
       const json = await res.json();
@@ -132,7 +133,8 @@ export default function EcoLogisticsPage({ setActiveTab }) {
       driverPhone: driverPhone || '+91 98000 00000',
       createdBy: currentUser.username,
       companyName: currentUser.companyName,
-      companyEmail: currentUser.email
+      companyEmail: currentUser.email,
+      role: currentUser.role
     };
 
     try {
@@ -167,13 +169,28 @@ export default function EcoLogisticsPage({ setActiveTab }) {
       const res = await fetch(`${API_BASE_URL}/trucks/${truckId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: currentUser.username })
+        body: JSON.stringify({ username: currentUser.username, role: currentUser.role })
       });
       if (res.ok) {
         setListedTrucks(current => current.filter(t => t.id !== truckId));
       }
     } catch (err) {
       console.error('Failed to delete truck:', err);
+    }
+  };
+
+  const handleRideDecision = async (truckId, status) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/trucks/${truckId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser.username, role: currentUser.role, status })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not update ride.');
+      setListedTrucks(current => current.map(truck => truck.id === truckId ? { ...truck, status: data.data.status } : truck));
+    } catch (err) {
+      setErrorMsg(err.message);
     }
   };
 
@@ -591,6 +608,27 @@ export default function EcoLogisticsPage({ setActiveTab }) {
                   </button>
 
                   {truck.createdBy === currentUser.username && (
+                    <>
+                    <button
+                      onClick={() => handleRideDecision(truck.id, 'accepted')}
+                      style={{
+                        padding: '8px 12px', borderRadius: '8px', border: '1px solid #86EFAC',
+                        background: '#F0FDF4', color: '#166534', fontSize: '0.82rem',
+                        fontWeight: '700', cursor: 'pointer'
+                      }}
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => handleRideDecision(truck.id, 'rejected')}
+                      style={{
+                        padding: '8px 12px', borderRadius: '8px', border: '1px solid #FCA5A5',
+                        background: '#FEF2F2', color: '#991B1B', fontSize: '0.82rem',
+                        fontWeight: '700', cursor: 'pointer'
+                      }}
+                    >
+                      Reject
+                    </button>
                     <button
                       onClick={() => handleDeleteTruck(truck.id)}
                       style={{
@@ -610,6 +648,7 @@ export default function EcoLogisticsPage({ setActiveTab }) {
                     >
                       <Trash2 size={14} /> Remove
                     </button>
+                    </>
                   )}
                 </div>
               </div>

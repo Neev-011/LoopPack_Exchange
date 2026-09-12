@@ -8,12 +8,13 @@ function userParams(user) {
   return new URLSearchParams({
     userId: user.id,
     username: user.username,
-    companyName: user.companyName
+    companyName: user.companyName,
+    userRole: user.role
   });
 }
 
 function userBody(user) {
-  return { userId: user.id, username: user.username, companyName: user.companyName };
+  return { userId: user.id, username: user.username, companyName: user.companyName, role: user.role };
 }
 
 export default function AccountHubPage({ view = 'materials' }) {
@@ -26,7 +27,7 @@ export default function AccountHubPage({ view = 'materials' }) {
   const [message, setMessage] = useState('');
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
-  const isSeller = currentUser?.role !== 'buyer';
+  const isSeller = ['supplier', 'buyer'].includes(currentUser?.role);
 
   const load = async () => {
     if (!currentUser) return;
@@ -111,7 +112,7 @@ export default function AccountHubPage({ view = 'materials' }) {
       const response = await fetch(`${API_BASE_URL}/listings/${editing.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...editing, quantity: cleanQty, price: cleanPrice, username: currentUser.username })
+        body: JSON.stringify({ ...editing, quantity: cleanQty, price: cleanPrice, username: currentUser.username, role: currentUser.role })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not update listing.');
@@ -128,7 +129,7 @@ export default function AccountHubPage({ view = 'materials' }) {
       const response = await fetch(`${API_BASE_URL}/listings/${listing.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: currentUser.username })
+        body: JSON.stringify({ username: currentUser.username, role: currentUser.role })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not delete listing.');

@@ -45,6 +45,10 @@ export default function CreateListingPage({ setActiveTab }) {
       setErrorMsg('Please sign in before posting a material so buyers can contact you and you can manage inquiries.');
       return;
     }
+    if (!['supplier', 'buyer'].includes(currentUser.role)) {
+      setErrorMsg('Only Buyer / Seller Organization accounts can post materials.');
+      return;
+    }
     const cleanQuantity = Math.max(1, Number(quantity) || 1);
     const cleanPrice = Math.max(0, Number(price) || 0);
 
@@ -69,6 +73,7 @@ export default function CreateListingPage({ setActiveTab }) {
       description: description || `Verified Grade ${grade} ${materialType} circular scrap lot ready for B2B pickup.`,
       image: scannedImage,
       createdBy: currentUser?.username,
+      role: currentUser?.role,
       companyName: currentUser?.companyName,
       ownerRole: currentUser?.roleLabel,
       createdByEmail: currentUser?.email || 'contact@looppack.io',
