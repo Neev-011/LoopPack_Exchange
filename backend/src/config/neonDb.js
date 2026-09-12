@@ -85,9 +85,11 @@ export async function initNeonTables() {
         created_by VARCHAR(100),
         company_name VARCHAR(255),
         owner_role VARCHAR(100),
+        created_by_email VARCHAR(255),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
+    await client`ALTER TABLE listings ADD COLUMN IF NOT EXISTS created_by_email VARCHAR(255)`;
 
     // 2. Inquiries Table
     await client`

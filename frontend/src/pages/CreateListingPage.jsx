@@ -62,7 +62,9 @@ export default function CreateListingPage({ setActiveTab }) {
       image: scannedImage,
       createdBy: currentUser?.username,
       companyName: currentUser?.companyName,
-      ownerRole: currentUser?.roleLabel
+      ownerRole: currentUser?.roleLabel,
+      createdByEmail: currentUser?.email || 'contact@looppack.io',
+      createdAt: new Date().toISOString()
     };
 
     try {
