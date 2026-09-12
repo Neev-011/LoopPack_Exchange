@@ -90,10 +90,25 @@ app.patch('/api/v1/listings/:id', async (req, res) => {
   if (!req.body?.username || listings[index].createdBy !== req.body.username) {
     return res.status(403).json({ error: 'Only the listing owner can edit this listing.' });
   }
+
+  if (req.body.quantity !== undefined) {
+    const q = Number(req.body.quantity);
+    if (isNaN(q) || q <= 0) {
+      return res.status(400).json({ error: 'Quantity must be a positive number greater than 0.' });
+    }
+  }
+
+  if (req.body.price !== undefined) {
+    const p = Number(req.body.price);
+    if (isNaN(p) || p < 0) {
+      return res.status(400).json({ error: 'Price cannot be a negative number.' });
+    }
+  }
+
   const editable = ['title', 'quantity', 'unit', 'grade', 'price', 'location', 'description'];
   editable.forEach(field => {
     if (req.body[field] !== undefined) listings[index][field] = field === 'quantity' || field === 'price'
-      ? Number(req.body[field])
+      ? Math.max(field === 'quantity' ? 1 : 0, Number(req.body[field]))
       : req.body[field];
   });
   listings[index].isFree = Number(listings[index].price) === 0;
@@ -324,21 +339,31 @@ app.post('/api/v1/listings', async (req, res) => {
     return res.status(401).json({ error: 'Sign in before posting so you can manage your listing and buyer inquiries.' });
   }
 
+  const numQty = Number(quantity);
+  if (isNaN(numQty) || numQty <= 0) {
+    return res.status(400).json({ error: 'Quantity must be a positive number greater than 0.' });
+  }
+
+  const numPrice = Number(price);
+  if (isNaN(numPrice) || numPrice < 0) {
+    return res.status(400).json({ error: 'Price cannot be a negative number.' });
+  }
+
   const listings = await getListings();
 
   const newListing = {
     id: Date.now(),
     title,
     materialType: materialType || 'cardboard',
-    quantity: Number(quantity) || 100,
+    quantity: numQty,
     unit: unit || (materialType === 'pallet' ? 'pallets' : materialType === 'hdpe' ? 'drums' : materialType === 'ldpe' ? 'kg' : 'boxes'),
     grade: grade || 'A',
     location: location || 'Warehouse Hub, Zone A',
     lat: Number(lat) || 19.08,
     lon: Number(lon) || 72.88,
     distanceKm: 5.0,
-    price: Number(price) || 0,
-    isFree: Number(price) === 0,
+    price: Math.max(0, numPrice),
+    isFree: numPrice === 0,
     description: description || 'Verified circular packaging material lot.',
     createdBy,
     companyName,
