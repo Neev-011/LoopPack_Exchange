@@ -122,6 +122,28 @@ export async function initNeonTables() {
       )
     `;
 
+    await client`
+      CREATE TABLE IF NOT EXISTS sales_orders (
+        id VARCHAR(80) PRIMARY KEY,
+        listing_id VARCHAR(64) NOT NULL,
+        listing_title VARCHAR(255) NOT NULL,
+        seller_username VARCHAR(100) NOT NULL,
+        buyer_id VARCHAR(64) NOT NULL,
+        buyer_username VARCHAR(100) NOT NULL,
+        buyer_company VARCHAR(255) NOT NULL,
+        buyer_email VARCHAR(255),
+        quantity NUMERIC NOT NULL,
+        unit VARCHAR(50),
+        unit_price NUMERIC DEFAULT 0,
+        total_price NUMERIC DEFAULT 0,
+        destination TEXT NOT NULL,
+        payment_method VARCHAR(80) NOT NULL,
+        status VARCHAR(40) DEFAULT 'completed',
+        listing_snapshot JSONB NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
     // 4. Users Table
     await client`
       CREATE TABLE IF NOT EXISTS users (
@@ -161,7 +183,7 @@ export async function initNeonTables() {
     `;
 
     isNeonConnected = true;
-    console.log('[Neon DB] PostgreSQL tables (listings, inquiries, messages, users, trucks) verified/created successfully!');
+    console.log('[Neon DB] PostgreSQL tables (listings, inquiries, messages, sales_orders, users, trucks) verified/created successfully!');
     return true;
   } catch (err) {
     console.error('[Neon DB] Table initialization error:', err.message);

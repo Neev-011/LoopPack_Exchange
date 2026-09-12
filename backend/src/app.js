@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeAvoidedCarbon } from './services/carbonEngineService.js';
-import { searchListingsPostGIS } from './services/spatialService.js';
+import { searchListingsPostGIS, geocodeLocation } from './services/spatialService.js';
 import { isNeonConnected, getNeonClient } from './config/neonDb.js';
 import { detectMaterialFromImage } from './services/imageDetectionService.js';
 import {
@@ -25,6 +25,7 @@ import {
   changeUserPassword
 } from './services/authService.js';
 import { getCompletedExchanges, recordCompletedExchange } from './services/exchangeService.js';
+import { solveOptimizedBackhaulRoute } from './services/vrpSolverService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -157,6 +158,95 @@ app.post('/api/v1/exchanges/completed', async (req, res) => {
     res.status(201).json({ status: 'success', data: exchange });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/v1/orders', async (req, res) => {
+  try {
+    const { listingId, buyer, quantity, destination, paymentMethod } = req.body || {};
+    if (!buyer?.id || !buyer?.username || !buyer?.companyName || !buyer?.email) {
+      return res.status(401).json({ error: 'Sign in with a complete buyer profile before reserving material.' });
+    }
+    if (!destination?.trim() || !paymentMethod?.trim()) {
+      return res.status(400).json({ error: 'Destination and payment method are required.' });
+    }
+    const client = getNeonClient();
+    if (!client) return res.status(503).json({ error: 'Database is unavailable. The order was not created.' });
+    const rows = await client`SELECT * FROM listings WHERE id = ${String(listingId)} LIMIT 1`;
+    if (!rows.length) return res.status(404).json({ error: 'This material is no longer available.' });
+    const listing = rows[0];
+    if (listing.created_by === buyer.username) return res.status(400).json({ error: 'You cannot purchase your own listing.' });
+    const requestedQuantity = Number(quantity);
+    if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0 || requestedQuantity > Number(listing.quantity)) {
+      return res.status(400).json({ error: `Quantity must be between 1 and ${listing.quantity}.` });
+    }
+    const order = {
+      id: `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      listingId: String(listing.id),
+      listingTitle: listing.title,
+      sellerUsername: listing.created_by,
+      buyerId: buyer.id,
+      buyerUsername: buyer.username,
+      buyerCompany: buyer.companyName,
+      buyerEmail: buyer.email,
+      quantity: requestedQuantity,
+      unit: listing.unit,
+      unitPrice: Number(listing.price) || 0,
+      totalPrice: (Number(listing.price) || 0) * requestedQuantity,
+      destination: destination.trim(),
+      paymentMethod: paymentMethod.trim(),
+      status: 'completed',
+      listingSnapshot: listing
+    };
+    await client`
+      INSERT INTO sales_orders (
+        id, listing_id, listing_title, seller_username, buyer_id, buyer_username, buyer_company,
+        buyer_email, quantity, unit, unit_price, total_price, destination, payment_method,
+        status, listing_snapshot
+      ) VALUES (
+        ${order.id}, ${order.listingId}, ${order.listingTitle}, ${order.sellerUsername}, ${order.buyerId},
+        ${order.buyerUsername}, ${order.buyerCompany}, ${order.buyerEmail}, ${order.quantity}, ${order.unit},
+        ${order.unitPrice}, ${order.totalPrice}, ${order.destination}, ${order.paymentMethod},
+        ${order.status}, ${JSON.stringify(order.listingSnapshot)}
+      )
+    `;
+    await recordCompletedExchange({
+      listing: {
+        id: listing.id,
+        title: listing.title,
+        materialType: listing.material_type,
+        quantity: requestedQuantity,
+        unit: listing.unit,
+        grade: listing.grade,
+        distanceKm: Number(listing.distance_km || listing.distanceKm || 10)
+      },
+      buyer
+    });
+    await client`DELETE FROM listings WHERE id = ${order.listingId}`;
+    res.status(201).json({ status: 'success', data: order });
+  } catch (err) {
+    console.error('[Orders] checkout failed:', err.message);
+    res.status(500).json({ error: 'Could not complete this reservation. Please try again.' });
+  }
+});
+
+app.get('/api/v1/orders', async (req, res) => {
+  try {
+    const username = req.query.username;
+    if (!username) return res.status(401).json({ error: 'A signed-in user is required.' });
+    const client = getNeonClient();
+    if (!client) return res.json({ data: [] });
+    const rows = await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`;
+    res.json({ data: rows.map(row => ({
+      id: row.id, listingId: row.listing_id, listingTitle: row.listing_title,
+      sellerUsername: row.seller_username, buyerId: row.buyer_id, buyerUsername: row.buyer_username,
+      buyerCompany: row.buyer_company, buyerEmail: row.buyer_email, quantity: Number(row.quantity),
+      unit: row.unit, unitPrice: Number(row.unit_price), totalPrice: Number(row.total_price),
+      destination: row.destination, paymentMethod: row.payment_method, status: row.status,
+      listingSnapshot: row.listing_snapshot, createdAt: row.created_at
+    })) });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not load completed sales.' });
   }
 });
 
@@ -446,6 +536,93 @@ app.post('/api/v1/carbon/calculate', (req, res) => {
   const { materialType, quantity, distanceKm, grade } = req.body;
   const result = computeAvoidedCarbon(materialType, quantity, distanceKm, grade);
   res.json(result);
+});
+
+// 6. Google OR-Tools & OSRM VRP Logistics Backhaul Route Optimizer Endpoint
+app.post('/api/v1/logistics/optimize-route', async (req, res) => {
+  try {
+    const { pickups, depot, dropFacility, originCity, destinationCity } = req.body || {};
+
+    // 1. Resolve Origin Depot (Geocode if string location is provided)
+    let resolvedDepot;
+    if (typeof originCity === 'string' && originCity.trim()) {
+      const geo = await geocodeLocation(originCity);
+      resolvedDepot = { lat: geo.lat, lon: geo.lon, name: `Depot: ${geo.name}`, location: geo.name };
+    } else if (depot && depot.lat && depot.lon) {
+      resolvedDepot = depot;
+    } else {
+      const geo = await geocodeLocation('Thane West');
+      resolvedDepot = { lat: geo.lat, lon: geo.lon, name: 'Thane Freight Depot', location: geo.name };
+    }
+
+    // 2. Resolve Destination Refurbishing / Recycling Hub
+    let resolvedDrop;
+    if (typeof destinationCity === 'string' && destinationCity.trim()) {
+      const geo = await geocodeLocation(destinationCity);
+      resolvedDrop = { lat: geo.lat, lon: geo.lon, name: `Drop: ${geo.name}`, address: geo.name };
+    } else if (dropFacility && dropFacility.lat && dropFacility.lon) {
+      resolvedDrop = dropFacility;
+    } else {
+      const geo = await geocodeLocation('Mahape Navi Mumbai');
+      resolvedDrop = { lat: geo.lat, lon: geo.lon, name: 'GreenPack Refurbishing Hub', address: geo.name };
+    }
+
+    // 3. Resolve Pickup Nodes (Use provided or load from actual active DB listings)
+    let resolvedPickups = [];
+    if (Array.isArray(pickups) && pickups.length > 0) {
+      resolvedPickups = await Promise.all(pickups.map(async (p, idx) => {
+        if (p.lat && p.lon) return p;
+        const geo = await geocodeLocation(p.location || p.address || p.title || 'Mumbai');
+        return {
+          id: p.id || `p_${idx + 1}`,
+          title: p.title || `Pickup ${idx + 1}`,
+          location: geo.name,
+          lat: geo.lat,
+          lon: geo.lon,
+          quantity: p.quantity || 100,
+          unit: p.unit || 'units',
+          materialType: p.materialType || 'packaging'
+        };
+      }));
+    } else {
+      // Load actual active marketplace listings from Neon DB / JSON database
+      const dbListings = await getListings();
+      if (dbListings && dbListings.length > 0) {
+        resolvedPickups = await Promise.all(dbListings.slice(0, 5).map(async (item, idx) => {
+          let lat = item.lat;
+          let lon = item.lon;
+          if (!lat || !lon) {
+            const geo = await geocodeLocation(item.location || 'Navi Mumbai');
+            lat = geo.lat;
+            lon = geo.lon;
+          }
+          return {
+            id: String(item.id),
+            title: item.title,
+            location: item.location || 'Industrial Hub',
+            lat,
+            lon,
+            quantity: item.quantity,
+            unit: item.unit,
+            materialType: item.materialType
+          };
+        }));
+      } else {
+        // Fallback geocoded hubs
+        resolvedPickups = [
+          { id: 'p1', title: '500 HDPE Drums Lot', location: 'Navi Mumbai Hub', lat: 19.080, lon: 73.010, quantity: 500, unit: 'drums', materialType: 'hdpe' },
+          { id: 'p2', title: '1,200 Balewrapped Corrugated Box Lot', location: 'Bhiwandi Gateway', lat: 19.290, lon: 73.060, quantity: 1200, unit: 'kg', materialType: 'cardboard' },
+          { id: 'p3', title: '350 Wooden Euro Pallets', location: 'Thane MIDC Industrial', lat: 19.200, lon: 72.980, quantity: 350, unit: 'pallets', materialType: 'pallet' }
+        ];
+      }
+    }
+
+    const result = await solveOptimizedBackhaulRoute(resolvedPickups, resolvedDepot, resolvedDrop);
+    res.json({ status: 'success', data: result });
+  } catch (err) {
+    console.error('[OR-Tools / OSRM VRP Solver Error]:', err);
+    res.status(500).json({ error: `VRP Optimization failed: ${err.message}` });
+  }
 });
 
 // 7. Logistics Fleet Truck Endpoints
