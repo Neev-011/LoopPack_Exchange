@@ -69,12 +69,14 @@ export default function Navbar({ activeTab, setActiveTab }) {
           <Sparkles size={16} /> AI Scanner & List
         </button>
 
-        <button
-          className={`nav-link ${activeTab === 'logistics' ? 'active' : ''}`}
-          onClick={() => handleNavClick('logistics')}
-        >
-          <Route size={16} /> Eco-Logistics
-        </button>
+        {currentUser?.role === 'logistics' && (
+          <button
+            className={`nav-link ${activeTab === 'logistics' ? 'active' : ''}`}
+            onClick={() => handleNavClick('logistics')}
+          >
+            <Route size={16} /> Eco-Logistics
+          </button>
+        )}
         <button
           className={`nav-link ${activeTab === 'carbon' ? 'active' : ''}`}
           onClick={() => handleNavClick('carbon')}
@@ -165,7 +167,7 @@ export default function Navbar({ activeTab, setActiveTab }) {
                   <div style={{ fontSize: '0.72rem', color: '#94A3B8', textTransform: 'uppercase', fontWeight: '700' }}>Enterprise Signed In</div>
                   <div style={{ fontSize: '0.9rem', fontWeight: '800', color: 'white' }}>{currentUser.companyName}</div>
                   <div style={{ fontSize: '0.75rem', color: '#34D399', fontWeight: '600' }}>
-                    Role: {currentUser.role === 'supplier' ? 'Packaging Generator / Supplier' : currentUser.role === 'buyer' ? 'Material Buyer' : 'Circularity Operator'}
+                    Role: {currentUser.role === 'supplier' ? 'Packaging Generator / Supplier' : currentUser.role === 'buyer' ? 'Material Buyer' : currentUser.role === 'logistics' ? 'Fleet & Logistics Carrier' : 'Circularity Operator'}
                   </div>
                 </div>
 
@@ -222,30 +224,32 @@ export default function Navbar({ activeTab, setActiveTab }) {
                   </div>
                 </button>
 
-                <button
-                  onClick={() => handleNavClick('logistics')}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: activeTab === 'logistics' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
-                    color: activeTab === 'logistics' ? '#34D399' : '#E2E8F0',
-                    fontSize: '0.88rem',
-                    fontWeight: '600',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                >
-                  <Route size={18} color="#F59E0B" />
-                  <div>
-                    <div>Eco-Logistics Carrier Hub</div>
-                    <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Fleet dispatch & VRP optimizer</div>
-                  </div>
-                </button>
+                {currentUser?.role === 'logistics' && (
+                  <button
+                    onClick={() => handleNavClick('logistics')}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      background: activeTab === 'logistics' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+                      color: activeTab === 'logistics' ? '#34D399' : '#E2E8F0',
+                      fontSize: '0.88rem',
+                      fontWeight: '600',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      textAlign: 'left'
+                    }}
+                  >
+                    <Route size={18} color="#F59E0B" />
+                    <div>
+                      <div>Eco-Logistics Carrier Hub</div>
+                      <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Fleet dispatch & VRP optimizer</div>
+                    </div>
+                  </button>
+                )}
 
                 <button
                   onClick={() => handleNavClick('profile')}
