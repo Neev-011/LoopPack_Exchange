@@ -5,7 +5,7 @@ export default function EcoLogisticsPage() {
   return (
     <div>
       <h2 style={{ fontSize: '1.8rem', color: '#0F172A', fontWeight: '800', marginBottom: '8px' }}>
-        Module 3: Eco-Routed Logistics & Backhaul Optimization
+        Eco-Routed Logistics & Backhaul Optimization
       </h2>
       <p style={{ color: '#64748B', marginBottom: '24px' }}>
         Vehicle Routing Problem (VRP) solver matching empty return trips with multi-stop packaging pickups.

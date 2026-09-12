@@ -29,7 +29,7 @@ export default function CarbonDashboardPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 style={{ fontSize: '1.8rem', color: '#0F172A', fontWeight: '800' }}>
-            Module 4: ISO 14044 LCA Embodied Carbon & ESG Engine
+            ISO 14044 LCA Embodied Carbon & ESG Engine
           </h2>
           <p style={{ color: '#64748B', fontSize: '0.92rem' }}>
             Real-time Scope 3 greenhouse gas avoidance tracking based on EPA WARM and Ecoinvent datasets.
