@@ -134,6 +134,20 @@ export default function MarketplacePage() {
     });
   }, [selectedProduct?.id]);
 
+  useEffect(() => {
+    if (!selectedProduct) return undefined;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyOverscrollBehavior = document.body.style.overscrollBehavior;
+    document.body.style.overflow = 'hidden';
+    document.body.style.overscrollBehavior = 'none';
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.overscrollBehavior = previousBodyOverscrollBehavior;
+    };
+  }, [selectedProduct]);
+
   // Fetch live database listings from Neon PostgreSQL
   const fetchListings = async () => {
     setRefreshing(true);
@@ -439,7 +453,8 @@ export default function MarketplacePage() {
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 2000,
-          padding: '20px'
+          padding: '20px',
+          overscrollBehavior: 'none'
         }}
         onClick={() => setSelectedProduct(null)}
         >
@@ -450,6 +465,9 @@ export default function MarketplacePage() {
             width: '100%',
             maxHeight: '90vh',
             overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            WebkitOverflowScrolling: 'touch',
+            touchAction: 'pan-y',
             boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)',
             border: '1px solid #E2E8F0'
           }}
