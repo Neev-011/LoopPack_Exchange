@@ -118,6 +118,30 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const updateProfile = async (profile) => {
+    const res = await fetch(`${API_BASE_URL}/auth/profile`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...profile, userId: currentUser?.id })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Profile update failed');
+    persistUser(data.user);
+    return data.user;
+  };
+
+  const changePassword = async ({ currentPassword, newPassword }) => {
+    const res = await fetch(`${API_BASE_URL}/auth/change-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentUser?.id, currentPassword, newPassword })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Password change failed');
+    persistUser(data.user);
+    return data;
+  };
+
   const logout = () => {
     persistUser(null);
   };
@@ -138,6 +162,8 @@ export function AuthProvider({ children }) {
         register,
         resetPassword,
         recoverUsername,
+        updateProfile,
+        changePassword,
         logout,
         switchAccount
       }}

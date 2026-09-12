@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import MaterialScanner from '../components/ai-grader/MaterialScanner';
 import { calculateAvoidedCarbon } from '../utils/carbonEngine';
 import { PlusCircle, MapPin, CheckCircle, Leaf, Loader2, RefreshCw } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
 
 export default function CreateListingPage({ setActiveTab }) {
+  const { currentUser } = useAuth();
   const [title, setTitle] = useState('');
   const [materialType, setMaterialType] = useState('cardboard');
   const [quantity, setQuantity] = useState(300);
@@ -24,6 +26,9 @@ export default function CreateListingPage({ setActiveTab }) {
 
   const handleAIScanResult = (res) => {
     if (res.isPackaging === false) {
+      setScannedImage(null);
+      setMaterialType('cardboard');
+      setGrade('A');
       setErrorMsg('Uploaded photo was rejected as non-packaging. Please upload a valid packaging photo.');
       return;
     }
@@ -36,6 +41,10 @@ export default function CreateListingPage({ setActiveTab }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!currentUser) {
+      setErrorMsg('Please sign in before posting a material so buyers can contact you and you can manage inquiries.');
+      return;
+    }
     setLoading(true);
     setErrorMsg(null);
 
@@ -50,7 +59,10 @@ export default function CreateListingPage({ setActiveTab }) {
       lat: 19.08,
       lon: 72.88,
       description: description || `Verified Grade ${grade} ${materialType} circular scrap lot ready for B2B pickup.`,
-      image: scannedImage
+      image: scannedImage,
+      createdBy: currentUser?.username,
+      companyName: currentUser?.companyName,
+      ownerRole: currentUser?.roleLabel
     };
 
     try {
@@ -77,14 +89,8 @@ export default function CreateListingPage({ setActiveTab }) {
         if (setActiveTab) setActiveTab('marketplace');
       }, 1800);
     } catch (err) {
-      console.warn('Backend POST error, attempting fallback:', err);
-      // Fallback local save if backend offline
       setLoading(false);
-      setSubmitted(true);
-      setTimeout(() => {
-        setSubmitted(false);
-        if (setActiveTab) setActiveTab('marketplace');
-      }, 1800);
+      setErrorMsg(err.message || 'Could not save this listing. Please try again.');
     }
   };
 

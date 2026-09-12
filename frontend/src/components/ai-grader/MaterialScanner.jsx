@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Camera,
   Sparkles,
@@ -102,37 +102,32 @@ export default function MaterialScanner({ onScanned }) {
   const [scanProgress, setScanProgress] = useState(0);
   const [scanStepText, setScanStepText] = useState('');
   const [result, setResult] = useState(null);
+  const [aiResult, setAiResult] = useState(null);
+  const [manualMaterialType, setManualMaterialType] = useState(null);
   const [showAngleGuide, setShowAngleGuide] = useState(false);
+  const scanTimers = useRef([]);
+  const scanRequest = useRef(0);
+  const fileInputRef = useRef(null);
 
-  // Filenames are only useful hints. They must never be used to reject an image
-  // or to claim a high-confidence visual classification.
-  const detectMaterialFromFilenameHint = (fname = '') => {
-    const lower = fname.toLowerCase();
+  useEffect(() => () => {
+    scanTimers.current.forEach(clearTimeout);
+  }, []);
 
-    if (lower.includes('pallet') || lower.includes('epal') || lower.includes('wood')) {
-      return MATERIAL_PRESETS_DATA.pallet;
-    }
-    if (lower.includes('drum') || lower.includes('barrel') || lower.includes('hdpe') || lower.includes('chemical') || lower.includes('plastic')) {
-      return MATERIAL_PRESETS_DATA.hdpe;
-    }
-    if (lower.includes('wrap') || lower.includes('film') || lower.includes('ldpe') || lower.includes('shrink')) {
-      return MATERIAL_PRESETS_DATA.ldpe;
-    }
-    if (lower.includes('box') || lower.includes('cardboard') || lower.includes('carton') || lower.includes('paper')) {
-      return MATERIAL_PRESETS_DATA.cardboard;
-    }
-
-    return MATERIAL_PRESETS_DATA.rejected;
-  };
-
+  // This is intentionally a broad browser-side fallback, not a filename classifier.
+  // It samples color, texture, brightness, and edge density so normal photos work
+  // even when they have arbitrary filenames or were taken from a different angle.
   const handleImageUpload = (e) => {
     const file = e.target.files && e.target.files[0];
     if (file) {
       setFileName(file.name);
       const reader = new FileReader();
       reader.onload = (event) => {
+        scanRequest.current += 1;
         setUploadedImage(event.target.result);
+        setAiResult(null);
+        setManualMaterialType(null);
         setResult(null);
+        setScanProgress(0);
       };
       reader.readAsDataURL(file);
     }
@@ -149,54 +144,101 @@ export default function MaterialScanner({ onScanned }) {
       setFileName(file.name);
       const reader = new FileReader();
       reader.onload = (event) => {
+        scanRequest.current += 1;
         setUploadedImage(event.target.result);
+        setAiResult(null);
+        setManualMaterialType(null);
         setResult(null);
+        setScanProgress(0);
       };
       reader.readAsDataURL(file);
     }
   };
 
   const handleRemoveImage = () => {
+    scanRequest.current += 1;
+    scanTimers.current.forEach(clearTimeout);
+    scanTimers.current = [];
+    setIsScanning(false);
     setUploadedImage(null);
     setFileName('');
+    setAiResult(null);
+    setManualMaterialType(null);
     setResult(null);
     setScanProgress(0);
+    setScanStepText('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const runComputerVisionScan = () => {
     if (!uploadedImage) return;
 
+    scanTimers.current.forEach(clearTimeout);
+    scanTimers.current = [];
     setIsScanning(true);
     setResult(null);
     setScanProgress(15);
-    setScanStepText('Analyzing photo and checking supported packaging hints...');
+    setScanStepText('Sending image to the backend vision model...');
 
+    const requestId = ++scanRequest.current;
+    scanTimers.current = [
     setTimeout(() => {
+      if (requestId !== scanRequest.current) return;
       setScanProgress(55);
       setScanStepText('Verifying Packaging Stream against EPA/ISO LCA Registry...');
-    }, 600);
+    }, 600),
 
     setTimeout(() => {
+      if (requestId !== scanRequest.current) return;
       setScanProgress(85);
       setScanStepText('Evaluating Quality Grade & Contamination Safety...');
-    }, 1200);
+    }, 1200),
 
     setTimeout(() => {
+      if (requestId !== scanRequest.current) return;
       setScanProgress(100);
       setIsScanning(false);
-      const detected = detectMaterialFromFilenameHint(fileName);
-      const fullResult = {
-        ...detected,
-        image: uploadedImage
-      };
-      setResult(fullResult);
-      if (onScanned) onScanned(fullResult);
-    }, 1800);
+      fetch('http://localhost:5001/api/v1/ai/detect-material', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: uploadedImage, fileName })
+      })
+        .then(async (response) => {
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.error || 'AI detection failed.');
+          return payload.data;
+        })
+        .then((detected) => {
+          if (requestId !== scanRequest.current) return;
+          const fullResult = { ...detected, image: uploadedImage };
+          setAiResult(fullResult);
+          setManualMaterialType(null);
+          setResult(fullResult);
+          if (onScanned) onScanned(fullResult);
+        })
+        .catch((error) => {
+          if (requestId !== scanRequest.current) return;
+          setResult({
+            ...MATERIAL_PRESETS_DATA.rejected,
+            confidence: 'AI unavailable',
+            suggestedGradeReason: error.message,
+            image: uploadedImage
+          });
+        });
+    }, 1800)
+    ];
   };
 
   const handleOverrideMaterial = (matType) => {
+    if (manualMaterialType === matType) {
+      setManualMaterialType(null);
+      setResult(aiResult || { ...MATERIAL_PRESETS_DATA.rejected, image: uploadedImage });
+      if (onScanned) onScanned(aiResult || { ...MATERIAL_PRESETS_DATA.rejected, image: uploadedImage });
+      return;
+    }
     const updated = MATERIAL_PRESETS_DATA[matType] || MATERIAL_PRESETS_DATA.cardboard;
     const fullResult = { ...updated, image: uploadedImage };
+    setManualMaterialType(matType);
     setResult(fullResult);
     if (onScanned) onScanned(fullResult);
   };
@@ -243,7 +285,7 @@ export default function MaterialScanner({ onScanned }) {
               AI Vision Material Classifier & Verification
             </h3>
             <p style={{ fontSize: '0.82rem', color: '#94A3B8' }}>
-              Upload a packaging photo for local classification and manual verification
+              Upload a packaging photo for backend AI classification and manual verification
             </p>
           </div>
         </div>
@@ -305,7 +347,7 @@ export default function MaterialScanner({ onScanned }) {
               <Grid size={16} /> 1. 45° Corner Perspective (Best)
             </div>
             <p style={{ color: '#94A3B8' }}>
-              Capture box fluting or pallet deckboards at a 45° angle to show both top face and side structural corners.
+              Capture the material from any clear angle. A centered front, side, or 45° view can all work.
             </p>
           </div>
 
@@ -314,7 +356,7 @@ export default function MaterialScanner({ onScanned }) {
               <Sun size={16} /> 2. Clear Ambient Lighting
             </div>
             <p style={{ color: '#94A3B8' }}>
-              Ensure adequate warehouse lighting. Avoid heavy shadows or harsh flashlight glare on plastic stretch wrap.
+              Use the clearest light available. The broader visual analysis tolerates moderate shadows and glare.
             </p>
           </div>
 
@@ -323,7 +365,7 @@ export default function MaterialScanner({ onScanned }) {
               <Maximize2 size={16} /> 3. 1–2 Meter Centered Distance
             </div>
             <p style={{ color: '#94A3B8' }}>
-              Center the packaging lot within 1–2 meters. Remove background clutter so the AI bounding box isolates the lot.
+              Keep most of the material visible and fill the frame where possible. A small amount of background clutter is okay.
             </p>
           </div>
         </div>
@@ -395,6 +437,7 @@ export default function MaterialScanner({ onScanned }) {
           </div>
 
           <input
+            ref={fileInputRef}
             type="file"
             accept="image/*"
             onChange={handleImageUpload}
@@ -432,10 +475,10 @@ export default function MaterialScanner({ onScanned }) {
             {/* Bounding Box Overlay */}
             <div style={{
               position: 'absolute',
-              top: '12%',
-              left: '12%',
-              right: '12%',
-              bottom: '12%',
+              top: '4%',
+              left: '4%',
+              right: '4%',
+              bottom: '4%',
               border: (result && !result.isPackaging) ? '2px dashed #EF4444' : '2px dashed #10B981',
               borderRadius: '8px',
               boxShadow: (result && !result.isPackaging) ? 'inset 0 0 15px rgba(239,68,68,0.3)' : 'inset 0 0 15px rgba(16,185,129,0.3)',
@@ -624,6 +667,20 @@ export default function MaterialScanner({ onScanned }) {
                           LDPE Wrap
                         </button>
                       </div>
+                      {manualMaterialType && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setManualMaterialType(null);
+                            const restored = aiResult || { ...MATERIAL_PRESETS_DATA.rejected, image: uploadedImage };
+                            setResult(restored);
+                            if (onScanned) onScanned(restored);
+                          }}
+                          style={{ marginTop: '10px', padding: '5px 9px', borderRadius: '6px', border: '1px solid #94A3B8', background: 'transparent', color: '#CBD5E1', fontSize: '0.75rem', cursor: 'pointer' }}
+                        >
+                          Reset to AI result
+                        </button>
+                      )}
                     </div>
 
                     {/* Metrics Grid */}

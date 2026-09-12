@@ -72,6 +72,17 @@ npm install
 npm run dev
 ```
 
+### AI image detection
+Material recognition runs on the backend through Gemini Vision. Set the API key before starting
+the backend; never put this key in frontend code:
+
+```bash
+set GEMINI_API_KEY=your_key_here
+```
+
+The scanner calls `POST /api/v1/ai/detect-material`. If the key is missing or the provider
+cannot analyze the image, the UI reports that AI is unavailable instead of guessing a material.
+
 ---
 
 ## 📄 Documentation

@@ -6,13 +6,23 @@ import { fileURLToPath } from 'url';
 import { computeAvoidedCarbon } from './services/carbonEngineService.js';
 import { searchListingsPostGIS } from './services/spatialService.js';
 import { solveOptimizedBackhaulRoute } from './services/vrpSolverService.js';
+import { detectMaterialFromImage } from './services/imageDetectionService.js';
+import {
+  createInquiry,
+  getInquiriesForUser,
+  updateInquiryStatus,
+  getMessages,
+  sendMessage
+} from './services/engagementService.js';
 import {
   getAllDemoUsers,
   checkUsername,
   authenticateUser,
   registerUser,
   resetPassword,
-  recoverUsername
+  recoverUsername,
+  updateUserProfile,
+  changeUserPassword
 } from './services/authService.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -22,6 +32,93 @@ const DB_FILE = path.join(__dirname, '../data/db.json');
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+app.post('/api/v1/ai/detect-material', async (req, res) => {
+  try {
+    const result = await detectMaterialFromImage(req.body?.image, req.body?.fileName);
+    res.json({ status: 'success', data: result });
+  } catch (err) {
+    console.error('[AI detection] failed:', err.message);
+    res.status(err.statusCode || 502).json({ error: err.message });
+  }
+});
+
+function requestUser(req) {
+  return {
+    id: req.body?.userId,
+    username: req.body?.username,
+    companyName: req.body?.companyName
+  };
+}
+
+app.post('/api/v1/inquiries', (req, res) => {
+  try {
+    const inquiry = createInquiry({
+      listing: req.body?.listing,
+      buyer: requestUser(req),
+      message: req.body?.message,
+      quantity: req.body?.quantity
+    });
+    res.status(201).json({ status: 'success', data: inquiry });
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ error: err.message });
+  }
+});
+
+app.get('/api/v1/inquiries', (req, res) => {
+  try {
+    const user = { id: req.query.userId, username: req.query.username, companyName: req.query.companyName };
+    res.json({ data: getInquiriesForUser(user, req.query.role === 'seller' ? 'seller' : 'buyer') });
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ error: err.message });
+  }
+});
+
+app.patch('/api/v1/inquiries/:id', (req, res) => {
+  try {
+    const item = updateInquiryStatus(req.params.id, requestUser(req), req.body?.status);
+    res.json({ status: 'success', data: item });
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ error: err.message });
+  }
+});
+
+app.patch('/api/v1/listings/:id', (req, res) => {
+  const listings = readDatabase();
+  const index = listings.findIndex(item => String(item.id) === String(req.params.id));
+  if (index === -1) return res.status(404).json({ error: 'Listing not found.' });
+  if (!req.body?.username || listings[index].createdBy !== req.body.username) {
+    return res.status(403).json({ error: 'Only the listing owner can edit this listing.' });
+  }
+  const editable = ['title', 'quantity', 'unit', 'grade', 'price', 'location', 'description'];
+  editable.forEach(field => {
+    if (req.body[field] !== undefined) listings[index][field] = field === 'quantity' || field === 'price'
+      ? Number(req.body[field])
+      : req.body[field];
+  });
+  listings[index].isFree = Number(listings[index].price) === 0;
+  listings[index].updatedAt = new Date().toISOString();
+  saveDatabase(listings);
+  res.json({ status: 'success', data: listings[index] });
+});
+
+app.get('/api/v1/inquiries/:id/messages', (req, res) => {
+  try {
+    const user = { id: req.query.userId, username: req.query.username, companyName: req.query.companyName };
+    res.json({ data: getMessages(req.params.id, user) });
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ error: err.message });
+  }
+});
+
+app.post('/api/v1/inquiries/:id/messages', (req, res) => {
+  try {
+    const message = sendMessage(req.params.id, requestUser(req), req.body?.body);
+    res.status(201).json({ status: 'success', data: message });
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ error: err.message });
+  }
+});
 
 // Helper to read DB from disk
 function readDatabase() {
@@ -107,6 +204,24 @@ app.post('/api/v1/auth/forgot-username', (req, res) => {
   }
 });
 
+app.patch('/api/v1/auth/profile', (req, res) => {
+  try {
+    const user = updateUserProfile(req.body);
+    res.json({ status: 'success', user });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/v1/auth/change-password', (req, res) => {
+  try {
+    const user = changeUserPassword(req.body);
+    res.json({ status: 'success', user, message: 'Password changed successfully.' });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // 3. Fetch Listings (Spatial / Filtered / Multi-User Owned)
 app.get('/api/v1/listings', (req, res) => {
   const listings = readDatabase();
@@ -144,6 +259,9 @@ app.post('/api/v1/listings', (req, res) => {
   if (!title || !materialType) {
     return res.status(400).json({ error: 'Title and materialType are required.' });
   }
+  if (!createdBy || !companyName) {
+    return res.status(401).json({ error: 'Sign in before posting so you can manage your listing and buyer inquiries.' });
+  }
 
   const listings = readDatabase();
 
@@ -161,8 +279,8 @@ app.post('/api/v1/listings', (req, res) => {
     price: Number(price) || 0,
     isFree: Number(price) === 0,
     description: description || 'Verified circular packaging material lot.',
-    createdBy: createdBy || 'apex_logistics',
-    companyName: companyName || 'Apex Packaging Solutions Ltd',
+    createdBy,
+    companyName,
     ownerRole: ownerRole || 'Packaging Generator / Supplier',
     image: image || (materialType === 'pallet' 
       ? 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?auto=format&fit=crop&w=600&q=80'

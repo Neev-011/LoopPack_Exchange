@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   MapPin, Package, ShieldCheck, Leaf, ArrowRight, Truck,
-  CheckCircle, RefreshCw, Check, X, Building2, Calendar, FileText, Info, Award, DollarSign
+  CheckCircle, RefreshCw, Check, X, Building2, Calendar, FileText, Info, Award, DollarSign, MessageSquare
 } from 'lucide-react';
 import { calculateAvoidedCarbon } from '../utils/carbonEngine';
+import { useAuth } from '../context/AuthContext';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
 
@@ -67,11 +68,14 @@ const MOCK_FALLBACK_LISTINGS = [
 ];
 
 export default function MarketplacePage() {
+  const { currentUser } = useAuth();
   const [dbListings, setDbListings] = useState(MOCK_FALLBACK_LISTINGS);
   const [filterType, setFilterType] = useState('all');
   const [maxRadius, setMaxRadius] = useState(25);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [claimedItem, setClaimedItem] = useState(null);
+  const [inquiryMessage, setInquiryMessage] = useState('');
+  const [inquirySent, setInquirySent] = useState(false);
 
   // Fetch live database listings
   useEffect(() => {
@@ -105,6 +109,33 @@ export default function MarketplacePage() {
     setTimeout(() => {
       setClaimedItem(null);
     }, 3500);
+  };
+
+  const sendInquiry = async () => {
+    if (!currentUser) {
+      setClaimedItem({ title: 'Please sign in before contacting a seller.', location: 'B2B Account' });
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/inquiries`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          listing: selectedProduct,
+          userId: currentUser.id,
+          username: currentUser.username,
+          companyName: currentUser.companyName,
+          message: inquiryMessage,
+          quantity: selectedProduct.quantity
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not send inquiry.');
+      setInquirySent(true);
+      setInquiryMessage('');
+    } catch (error) {
+      setClaimedItem({ title: error.message, location: 'Inquiry' });
+    }
   };
 
   return (
@@ -410,6 +441,16 @@ export default function MarketplacePage() {
                   {selectedProduct.description || 'Verified circular packaging material lot ready for B2B pickup.'}
                 </p>
               </div>
+
+              {selectedProduct.createdBy && selectedProduct.createdBy !== currentUser?.username && (
+                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: 16, borderRadius: 10, marginBottom: 20 }}>
+                  <h4 style={{ margin: '0 0 8px', color: '#0F172A' }}>Contact the seller</h4>
+                  {inquirySent ? <p style={{ color: '#047857', margin: 0 }}>Inquiry sent. The seller can respond from their Relationship Hub.</p> : <>
+                    <textarea rows="3" value={inquiryMessage} onChange={e => setInquiryMessage(e.target.value)} placeholder="Ask about availability, pickup timing, condition, or pricing..." style={{ width: '100%', padding: 10, borderRadius: 6, border: '1px solid #CBD5E1', marginBottom: 8 }} />
+                    <button className="btn-secondary" onClick={sendInquiry} disabled={!inquiryMessage.trim()}><MessageSquare size={15} /> Send inquiry & open chat</button>
+                  </>}
+                </div>
+              )}
 
               {/* Modal Action Buttons */}
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
