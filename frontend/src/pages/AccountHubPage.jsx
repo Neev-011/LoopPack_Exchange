@@ -165,51 +165,74 @@ export default function AccountHubPage({ view = 'materials', setActiveTab }) {
       {/* Account Hub Navigation Tabs */}
       {setActiveTab && (
         <div className="responsive-tabs-bar" style={{ gap: '10px', marginBottom: '24px' }}>
-          <button
-            onClick={() => setActiveTab('account')}
-            style={{
-              padding: '10px 18px',
-              borderRadius: '10px',
-              border: view === 'materials' ? '1px solid #10B981' : '1px solid #CBD5E1',
-              background: view === 'materials' ? '#ECFDF5' : 'white',
-              color: view === 'materials' ? '#047857' : '#475569',
-              fontWeight: '700',
-              fontSize: '0.9rem',
-              cursor: 'pointer'
-            }}
-          >
-            📦 My Listed Materials
-          </button>
-          <button
-            onClick={() => setActiveTab('purchases')}
-            style={{
-              padding: '10px 18px',
-              borderRadius: '10px',
-              border: view === 'purchases' ? '1px solid #10B981' : '1px solid #CBD5E1',
-              background: view === 'purchases' ? '#ECFDF5' : 'white',
-              color: view === 'purchases' ? '#047857' : '#475569',
-              fontWeight: '700',
-              fontSize: '0.9rem',
-              cursor: 'pointer'
-            }}
-          >
-            🛒 My Purchases
-          </button>
-          <button
-            onClick={() => setActiveTab('sales')}
-            style={{
-              padding: '10px 18px',
-              borderRadius: '10px',
-              border: view === 'sales' ? '1px solid #10B981' : '1px solid #CBD5E1',
-              background: view === 'sales' ? '#ECFDF5' : 'white',
-              color: view === 'sales' ? '#047857' : '#475569',
-              fontWeight: '700',
-              fontSize: '0.9rem',
-              cursor: 'pointer'
-            }}
-          >
-            💰 Sales History
-          </button>
+          {currentUser?.role !== 'logistics' && (
+            <>
+              <button
+                onClick={() => setActiveTab('account')}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  border: view === 'materials' ? '1px solid #10B981' : '1px solid #CBD5E1',
+                  background: view === 'materials' ? '#ECFDF5' : 'white',
+                  color: view === 'materials' ? '#047857' : '#475569',
+                  fontWeight: '700',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer'
+                }}
+              >
+                📦 My Listed Materials
+              </button>
+              <button
+                onClick={() => setActiveTab('purchases')}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  border: view === 'purchases' ? '1px solid #10B981' : '1px solid #CBD5E1',
+                  background: view === 'purchases' ? '#ECFDF5' : 'white',
+                  color: view === 'purchases' ? '#047857' : '#475569',
+                  fontWeight: '700',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer'
+                }}
+              >
+                🛒 My Purchases
+              </button>
+              <button
+                onClick={() => setActiveTab('sales')}
+                style={{
+                  padding: '10px 18px',
+                  borderRadius: '10px',
+                  border: view === 'sales' ? '1px solid #10B981' : '1px solid #CBD5E1',
+                  background: view === 'sales' ? '#ECFDF5' : 'white',
+                  color: view === 'sales' ? '#047857' : '#475569',
+                  fontWeight: '700',
+                  fontSize: '0.9rem',
+                  cursor: 'pointer'
+                }}
+              >
+                💰 Sales History
+              </button>
+            </>
+          )}
+
+          {currentUser?.role === 'logistics' && (
+            <button
+              onClick={() => setActiveTab('logistics')}
+              style={{
+                padding: '10px 18px',
+                borderRadius: '10px',
+                border: '1px solid #3B82F6',
+                background: '#EFF6FF',
+                color: '#1D4ED8',
+                fontWeight: '700',
+                fontSize: '0.9rem',
+                cursor: 'pointer'
+              }}
+            >
+              🚛 Eco-Logistics Carrier Hub
+            </button>
+          )}
+
           <button
             onClick={() => setActiveTab('inquiries')}
             style={{

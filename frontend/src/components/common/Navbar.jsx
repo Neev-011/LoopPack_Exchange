@@ -59,20 +59,23 @@ export default function Navbar({ activeTab, setActiveTab }) {
         >
           Overview
         </button>
-        <button
-          className={`nav-link ${activeTab === 'marketplace' ? 'active' : ''}`}
-          onClick={() => handleNavClick('marketplace')}
-        >
-          <Store size={16} /> Geo-Marketplace
-        </button>
 
-        {/* AI Scanner & Listing Tab */}
-        <button
-          className={`nav-link ${activeTab === 'create-listing' ? 'active' : ''}`}
-          onClick={() => handleNavClick('create-listing')}
-        >
-          <Sparkles size={16} /> AI Scanner & List
-        </button>
+        {currentUser?.role !== 'logistics' && (
+          <>
+            <button
+              className={`nav-link ${activeTab === 'marketplace' ? 'active' : ''}`}
+              onClick={() => handleNavClick('marketplace')}
+            >
+              <Store size={16} /> Geo-Marketplace
+            </button>
+            <button
+              className={`nav-link ${activeTab === 'create-listing' ? 'active' : ''}`}
+              onClick={() => handleNavClick('create-listing')}
+            >
+              <Sparkles size={16} /> AI Scanner & List
+            </button>
+          </>
+        )}
 
         {currentUser?.role === 'logistics' && (
           <button
@@ -178,39 +181,52 @@ export default function Navbar({ activeTab, setActiveTab }) {
                 <div style={{ height: '1px', background: '#E2E8F0', margin: '6px 0' }} />
 
                 {/* Dropdown Navigation Options */}
-                <button
-                  className={`dropdown-item-btn ${activeTab === 'account' ? 'active' : ''}`}
-                  onClick={() => handleNavClick('account')}
-                >
-                  <PackageCheck size={18} color="#059669" />
-                  <div>
-                    <div style={{ fontWeight: '700' }}>My Listed Materials</div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Manage lots & price edits</div>
-                  </div>
-                </button>
+                {currentUser?.role !== 'logistics' && (
+                  <>
+                    <button
+                      className={`dropdown-item-btn ${activeTab === 'account' ? 'active' : ''}`}
+                      onClick={() => handleNavClick('account')}
+                    >
+                      <PackageCheck size={18} color="#059669" />
+                      <div>
+                        <div style={{ fontWeight: '700' }}>My Listed Materials</div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Manage lots & price edits</div>
+                      </div>
+                    </button>
 
-                {currentUser && (
-                  <button
-                    className={`dropdown-item-btn ${activeTab === 'purchases' ? 'active' : ''}`}
-                    onClick={() => handleNavClick('purchases')}
-                  >
-                    <ShoppingBag size={18} color="#059669" />
-                    <div>
-                      <div style={{ fontWeight: '700' }}>My Purchases</div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Orders & delivery details</div>
-                    </div>
-                  </button>
+                    <button
+                      className={`dropdown-item-btn ${activeTab === 'purchases' ? 'active' : ''}`}
+                      onClick={() => handleNavClick('purchases')}
+                    >
+                      <ShoppingBag size={18} color="#059669" />
+                      <div>
+                        <div style={{ fontWeight: '700' }}>My Purchases</div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Orders & delivery details</div>
+                      </div>
+                    </button>
+
+                    <button
+                      className={`dropdown-item-btn ${activeTab === 'sales' ? 'active' : ''}`}
+                      onClick={() => handleNavClick('sales')}
+                    >
+                      <ShoppingBag size={18} color="#D97706" />
+                      <div>
+                        <div style={{ fontWeight: '700' }}>Sales History</div>
+                        <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Orders and buyer details</div>
+                      </div>
+                    </button>
+                  </>
                 )}
 
-                {currentUser && (
+                {currentUser?.role === 'logistics' && (
                   <button
-                    className={`dropdown-item-btn ${activeTab === 'sales' ? 'active' : ''}`}
-                    onClick={() => handleNavClick('sales')}
+                    className={`dropdown-item-btn ${activeTab === 'logistics' ? 'active' : ''}`}
+                    onClick={() => handleNavClick('logistics')}
                   >
-                    <ShoppingBag size={18} color="#D97706" />
+                    <Route size={18} color="#D97706" />
                     <div>
-                      <div style={{ fontWeight: '700' }}>Sales History</div>
-                      <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Orders and buyer details</div>
+                      <div style={{ fontWeight: '700' }}>Eco-Logistics Carrier Hub</div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Available vehicles & routes</div>
                     </div>
                   </button>
                 )}
@@ -222,22 +238,9 @@ export default function Navbar({ activeTab, setActiveTab }) {
                   <MessageSquare size={18} color="#2563EB" />
                   <div>
                     <div style={{ fontWeight: '700' }}>My B2B Inquiries & Chat</div>
-                    <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Active buyer & seller negotiation</div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Active negotiations & messages</div>
                   </div>
                 </button>
-
-                {currentUser?.role === 'logistics' && (
-                  <button
-                    className={`dropdown-item-btn ${activeTab === 'logistics' ? 'active' : ''}`}
-                    onClick={() => handleNavClick('logistics')}
-                  >
-                    <Route size={18} color="#D97706" />
-                    <div>
-                      <div>Eco-Logistics Carrier Hub</div>
-                      <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Available vehicles & routes</div>
-                    </div>
-                  </button>
-                )}
 
                 <button
                   className={`dropdown-item-btn ${activeTab === 'profile' ? 'active' : ''}`}
@@ -252,28 +255,30 @@ export default function Navbar({ activeTab, setActiveTab }) {
 
                 <div style={{ height: '1px', background: '#E2E8F0', margin: '6px 0' }} />
 
-                <button
-                  onClick={() => handleNavClick('create-listing')}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid #A7F3D0',
-                    background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
-                    color: '#047857',
-                    fontSize: '0.88rem',
-                    fontWeight: '700',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    cursor: 'pointer',
-                    marginBottom: '4px',
-                    transition: 'all 0.2s ease'
-                  }}
-                >
-                  <PlusCircle size={18} color="#059669" />
-                  <div>Post New Material</div>
-                </button>
+                {currentUser?.role !== 'logistics' && (
+                  <button
+                    onClick={() => handleNavClick('create-listing')}
+                    style={{
+                      width: '100%',
+                      padding: '10px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #A7F3D0',
+                      background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
+                      color: '#047857',
+                      fontSize: '0.88rem',
+                      fontWeight: '700',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      cursor: 'pointer',
+                      marginBottom: '4px',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <PlusCircle size={18} color="#059669" />
+                    <div>Post New Material</div>
+                  </button>
+                )}
 
                 <button
                   onClick={() => {
@@ -333,18 +338,22 @@ export default function Navbar({ activeTab, setActiveTab }) {
           >
             Overview
           </button>
-          <button
-            className={`nav-link ${activeTab === 'marketplace' ? 'active' : ''}`}
-            onClick={() => handleNavClick('marketplace')}
-          >
-            <Store size={18} /> Geo-Marketplace
-          </button>
-          <button
-            className={`nav-link ${activeTab === 'create-listing' ? 'active' : ''}`}
-            onClick={() => handleNavClick('create-listing')}
-          >
-            <Sparkles size={18} /> AI Scanner & List
-          </button>
+          {currentUser?.role !== 'logistics' && (
+            <>
+              <button
+                className={`nav-link ${activeTab === 'marketplace' ? 'active' : ''}`}
+                onClick={() => handleNavClick('marketplace')}
+              >
+                <Store size={18} /> Geo-Marketplace
+              </button>
+              <button
+                className={`nav-link ${activeTab === 'create-listing' ? 'active' : ''}`}
+                onClick={() => handleNavClick('create-listing')}
+              >
+                <Sparkles size={18} /> AI Scanner & List
+              </button>
+            </>
+          )}
           {currentUser?.role === 'logistics' && (
             <button
               className={`nav-link ${activeTab === 'logistics' ? 'active' : ''}`}
