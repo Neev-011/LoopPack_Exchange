@@ -104,5 +104,18 @@
     "securityQuestion": "What is your company's founding hub city?",
     "securityAnswer": "gondal",
     "createdAt": "2026-09-12T16:26:34.404Z"
+  },
+  {
+    "id": "usr_1789239658801",
+    "username": "skv",
+    "companyName": "ksv.limited",
+    "email": "kvs@gmail.com",
+    "password": "kashyap@6907",
+    "role": "supplier",
+    "roleLabel": "Buyer / Seller Organization",
+    "industry": "Logistics & Warehousing",
+    "securityQuestion": "What is your company's founding hub city?",
+    "securityAnswer": "morbi",
+    "createdAt": "2026-09-12T19:00:58.801Z"
   }
 ]
