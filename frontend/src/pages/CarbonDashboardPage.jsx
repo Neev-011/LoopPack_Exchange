@@ -1,195 +1,184 @@
-import React, { useState } from 'react';
-import { Leaf, Award, Download, ShieldCheck, CheckCircle2, TreeDeciduous, Car, Factory, FileCheck } from 'lucide-react';
-import { calculateAvoidedCarbon } from '../utils/carbonEngine';
+import React, { useEffect, useState } from 'react';
+import { ChevronDown, Download, FileCheck, Info, Leaf, Recycle, Scale } from 'lucide-react';
+import { calculateAvoidedCarbon, MATERIAL_EMISSION_FACTORS, FREIGHT_EMISSION_FACTOR_PER_TON_KM } from '../utils/carbonEngine';
 import { generateESGCertificatePDF } from '../utils/esgCertificateGenerator';
+import { useAuth } from '../context/AuthContext';
+import brandShowcase from '../assets/brand-showcase.png';
+
+const API_BASE_URL = 'http://localhost:5001/api/v1';
+
+const formatNumber = (value, maximumFractionDigits = 1) => (
+  value.toLocaleString('en-US', { maximumFractionDigits })
+);
 
 export default function CarbonDashboardPage() {
+  const { currentUser } = useAuth();
   const [downloading, setDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(null);
+  const [exchanges, setExchanges] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
-  // Sample cumulative platform numbers
-  const totalCardboard = calculateAvoidedCarbon('cardboard', 12500, 15, 'A');
-  const totalPallets = calculateAvoidedCarbon('pallet', 3200, 20, 'A');
-  const totalHDPE = calculateAvoidedCarbon('hdpe', 1400, 30, 'B');
+  useEffect(() => {
+    async function loadCompletedExchanges() {
+      if (!currentUser?.username) {
+        setExchanges([]);
+        setLoadError('Sign in to view your personal material impact.');
+        setLoading(false);
+        return;
+      }
+      try {
+        const params = new URLSearchParams({ buyerUsername: currentUser.username });
+        const response = await fetch(`${API_BASE_URL}/exchanges/completed?${params}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not load completed exchanges.');
+        setExchanges(Array.isArray(data.data) ? data.data : []);
+      } catch (error) {
+        setLoadError('Your completed exchanges could not be loaded. Showing zero until the marketplace is connected.');
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadCompletedExchanges();
+  }, [currentUser?.username]);
 
-  const grandTotalNetCO2e = (
-    totalCardboard.netCO2eAvoided +
-    totalPallets.netCO2eAvoided +
-    totalHDPE.netCO2eAvoided
-  ).toFixed(1);
+  const streams = exchanges.map((exchange) => {
+    const materialKey = MATERIAL_EMISSION_FACTORS[exchange.materialType] ? exchange.materialType : 'cardboard';
+    const result = calculateAvoidedCarbon(materialKey, exchange.quantity, exchange.distanceKm, exchange.grade);
+    return {
+      ...exchange,
+      key: exchange.id,
+      materialKey,
+      label: exchange.listingTitle || result.materialName,
+      quantityLabel: `${formatNumber(exchange.quantity, 2)} ${exchange.unit || 'units'}`,
+      action: exchange.grade === 'A' ? 'Reused' : 'Recycled',
+      result
+    };
+  });
 
-  const handleDownloadCertificate = () => {
+  const totalWeightKg = streams.reduce((sum, stream) => sum + stream.result.totalWeightKg, 0);
+  const totalNetCO2e = streams.reduce((sum, stream) => sum + stream.result.netCO2eAvoided, 0);
+  const grandTotalNetCO2e = totalNetCO2e.toFixed(1);
+
+  const handleDownloadReport = () => {
     setDownloading(true);
     setDownloadSuccess(null);
 
     setTimeout(() => {
       try {
-        const streams = [
-          {
-            name: 'Corrugated Cardboard (12,500 units)',
-            virgin: `+${totalCardboard.eVirgin.toLocaleString()} kg`,
-            rep: `-${totalCardboard.eReprocessing.toLocaleString()} kg`,
-            freight: `-${totalCardboard.eTransport.toLocaleString()} kg`,
-            net: `${totalCardboard.netCO2eAvoided.toLocaleString()} kg`
-          },
-          {
-            name: 'Euro Wooden Pallets (3,200 units)',
-            virgin: `+${totalPallets.eVirgin.toLocaleString()} kg`,
-            rep: `-${totalPallets.eReprocessing.toLocaleString()} kg`,
-            freight: `-${totalPallets.eTransport.toLocaleString()} kg`,
-            net: `${totalPallets.netCO2eAvoided.toLocaleString()} kg`
-          },
-          {
-            name: 'HDPE Chemical Drums (1,400 units)',
-            virgin: `+${totalHDPE.eVirgin.toLocaleString()} kg`,
-            rep: `-${totalHDPE.eReprocessing.toLocaleString()} kg`,
-            freight: `-${totalHDPE.eTransport.toLocaleString()} kg`,
-            net: `${totalHDPE.netCO2eAvoided.toLocaleString()} kg`
-          }
-        ];
-
+        const reportStreams = streams.map((stream) => ({
+          name: `${stream.label} (${stream.quantityLabel})`,
+          virgin: `+${stream.result.eVirgin.toLocaleString()} kg`,
+          rep: `-${stream.result.eReprocessing.toLocaleString()} kg`,
+          freight: `-${stream.result.eTransport.toLocaleString()} kg`,
+          net: `${stream.result.netCO2eAvoided.toLocaleString()} kg`
+        }));
+        const userName = currentUser.companyName || currentUser.username;
         const filename = generateESGCertificatePDF({
-          streams,
+          streams: reportStreams,
           grandTotalNetCO2e,
-          issuedTo: 'LoopPack Enterprise B2B Network'
+          issuedTo: userName,
+          userName,
+          logoUrl: brandShowcase
         });
-
-        setDownloadSuccess({
-          filename,
-          time: new Date().toLocaleTimeString()
-        });
+        setDownloadSuccess({ filename, time: new Date().toLocaleTimeString() });
       } catch (err) {
-        console.error('Failed to generate audited ESG certificate PDF:', err);
+        console.error('Failed to generate impact report:', err);
       } finally {
         setDownloading(false);
       }
-    }, 800);
+    }, 400);
   };
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+    <div className="impact-dashboard">
+      <header className="impact-header">
         <div>
-          <h2 style={{ fontSize: '1.8rem', color: '#0F172A', fontWeight: '800' }}>
-            ISO 14044 LCA Embodied Carbon & ESG Engine
-          </h2>
-          <p style={{ color: '#64748B', fontSize: '0.92rem' }}>
-            Real-time Scope 3 greenhouse gas avoidance tracking based on EPA WARM and Ecoinvent datasets.
-          </p>
+          <div className="impact-eyebrow"><Leaf size={16} /> LoopPack environmental impact</div>
+          <h1>Impact Dashboard</h1>
+          <p>Estimated environmental impact from materials exchanged through LoopPack.</p>
         </div>
-
-        <button className="btn-primary" onClick={handleDownloadCertificate} disabled={downloading}>
-          <Download size={18} /> {downloading ? 'Generating Audit PDF...' : 'Download Audited ESG Certificate'}
+        <button className="btn-primary" onClick={handleDownloadReport} disabled={downloading}>
+          <Download size={18} /> {downloading ? 'Preparing report...' : 'Download Impact Report'}
         </button>
-      </div>
+      </header>
 
       {downloadSuccess && (
-        <div style={{
-          background: '#ECFDF5',
-          border: '1px solid #10B981',
-          borderRadius: '12px',
-          padding: '16px 20px',
-          marginBottom: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          color: '#065F46',
-          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)',
-          animation: 'fadeIn 0.3s ease-in-out'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <FileCheck size={24} color="#059669" />
-            <div>
-              <div style={{ fontWeight: '700', fontSize: '1rem', color: '#065F46' }}>
-                ISO 14044 Audited ESG Certificate Generated & Downloaded!
-              </div>
-              <div style={{ fontSize: '0.88rem', color: '#047857', marginTop: '2px' }}>
-                Saved as <strong style={{ textDecoration: 'underline' }}>{downloadSuccess.filename}</strong> to your computer's <strong>Downloads</strong> folder at {downloadSuccess.time}.
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={() => setDownloadSuccess(null)}
-            style={{ background: 'none', border: 'none', color: '#059669', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.2rem', padding: '4px 8px' }}
-            title="Dismiss"
-          >
-            ✕
-          </button>
+        <div className="impact-success" role="status">
+          <FileCheck size={21} />
+          <span>Impact report downloaded as <strong>{downloadSuccess.filename}</strong> at {downloadSuccess.time}.</span>
+          <button onClick={() => setDownloadSuccess(null)} aria-label="Dismiss report message">×</button>
         </div>
       )}
 
-      {/* Main Carbon Highlights Banner */}
-      <div style={{ background: 'linear-gradient(135deg, #0F5132 0%, #047857 100%)', color: 'white', padding: '36px', borderRadius: '16px', marginBottom: '32px', boxShadow: '0 10px 25px rgba(15, 81, 50, 0.2)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', fontWeight: '700', textTransform: 'uppercase', color: '#A7F3D0', letterSpacing: '0.5px' }}>
-          <ShieldCheck size={18} /> Certified Scope 3 Avoided Carbon Footprint
-        </div>
-        <div style={{ fontSize: '3.2rem', fontWeight: '800', lineHeight: 1.1, margin: '12px 0 8px' }}>
-          {grandTotalNetCO2e} <span style={{ fontSize: '1.5rem', fontWeight: '400', color: '#E2E8F0' }}>kg CO₂e Avoided</span>
-        </div>
-        <p style={{ color: '#E2E8F0', fontSize: '1.05rem', maxWidth: '700px' }}>
-          By recirculating 12.5 tons of corrugated cardboard, 3.2K wooden Euro pallets, and 1.4K HDPE chemical drums within local B2B networks.
-        </p>
+      {loadError && <div className="impact-success" role="status"><Info size={18} /> {loadError}</div>}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginTop: '24px', borderTop: '1px solid rgba(255,255,255,0.2)', paddingTop: '20px' }}>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: '#A7F3D0', textTransform: 'uppercase' }}>Tree Absorption Equivalent</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: '700' }}>~{Math.round(grandTotalNetCO2e / 20)} Trees / Year</div>
-          </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: '#A7F3D0', textTransform: 'uppercase' }}>Passenger Vehicle Offset</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: '700' }}>~{Math.round(grandTotalNetCO2e / 0.12).toLocaleString()} km Driven</div>
-          </div>
-          <div>
-            <div style={{ fontSize: '0.8rem', color: '#A7F3D0', textTransform: 'uppercase' }}>Virgin Raw Material Saved</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: '700' }}>98.5 Tons Solid Waste</div>
+      <section className="primary-impact-card" aria-labelledby="primary-impact-heading">
+        <div className="primary-impact-copy">
+          <div className="impact-eyebrow"><Recycle size={17} /> Estimated impact</div>
+          <h2 id="primary-impact-heading">Estimated CO₂e Avoided</h2>
+          <div className="primary-impact-value">{formatNumber(totalNetCO2e, 1)} <span>kg CO₂e</span></div>
+          <p>Based on {formatNumber(totalWeightKg / 1000, 2)} tonnes of materials from completed LoopPack exchanges.</p>
+          <small>Based on configured emission factors and transaction data. This is an estimate, not a guaranteed environmental saving.</small>
+        </div>
+        <div className="primary-impact-mark"><Scale size={38} /></div>
+      </section>
+
+      <section className="impact-metrics" aria-label="Supporting impact metrics">
+        <div className="impact-metric-card"><span>Material Recirculated</span><strong>{formatNumber(totalWeightKg / 1000, 2)} tonnes</strong><small>Across the listed material streams</small></div>
+        <div className="impact-metric-card"><span>Completed Exchanges</span><strong>{exchanges.length}</strong><small>Recorded marketplace purchases</small></div>
+        <div className="impact-metric-card"><span>Waste Diverted</span><strong>{formatNumber(totalWeightKg / 1000, 2)} tonnes</strong><small>Material represented in the current estimate</small></div>
+      </section>
+
+      <section className="impact-section" aria-labelledby="material-impact-heading">
+        <div className="section-heading"><div><h2 id="material-impact-heading">ISO 14044 Material Stream Avoidance Ledger</h2><p>{currentUser?.companyName || currentUser?.username || 'Your'} material impact from completed LoopPack exchanges.</p></div></div>
+        <div className="impact-table-wrap">
+          <table className="impact-table">
+            <thead><tr><th>Material</th><th>Quantity</th><th>Circular Action</th><th>Estimated CO₂e Avoided</th></tr></thead>
+            <tbody>
+              {streams.length === 0 && <tr><td colSpan="4" className="impact-empty">{loading ? 'Loading completed exchanges...' : 'No completed exchanges yet. Purchase a marketplace lot to start the impact total.'}</td></tr>}
+              {streams.map((stream) => (
+                <tr key={stream.key}>
+                  <td><strong>{stream.label}</strong><small>{formatNumber(stream.result.totalWeightTons, 2)} tonnes material weight</small></td>
+                  <td>{stream.quantityLabel}</td><td><span className="action-pill">{stream.action}</span></td>
+                  <td className="impact-table-value">{formatNumber(stream.result.netCO2eAvoided, 2)} kg CO₂e</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <details className="calculation-details">
+        <summary><span><h2>How is this estimate calculated?</h2><p>Open the calculation method and inputs used for each material stream.</p></span><ChevronDown size={20} /></summary>
+        <div className="calculation-content">
+          <div className="formula-card"><div><span>Estimated CO₂e Avoided</span><strong>E<sub>virgin</sub> − (E<sub>reprocessing</sub> + E<sub>transport</sub>)</strong></div><p>Virgin material emissions<br />− Reprocessing emissions<br />− Transport emissions</p></div>
+          <div className="calculation-streams">
+            {streams.length === 0 && <p className="impact-empty">No completed exchanges yet. Calculation details will appear here after a marketplace purchase.</p>}
+            {streams.map((stream) => {
+              const factor = MATERIAL_EMISSION_FACTORS[stream.materialKey];
+              return (
+                <div className="calculation-stream" key={stream.key}>
+                  <div className="calculation-stream-title"><strong>{stream.label}</strong><span>{stream.action} • Grade {stream.grade}</span></div>
+                  <div className="calculation-inputs">
+                    <span>Material quantity<strong>{formatNumber(stream.result.totalWeightKg, 1)} kg</strong></span>
+                    <span>Virgin emission factor<strong>{factor.virginFactorKg} kg CO₂e/kg</strong></span>
+                    <span>Reprocessing factor<strong>{stream.grade === 'A' ? '0' : factor.reprocessFactorKg} kg CO₂e/kg</strong></span>
+                    <span>Transport distance<strong>{stream.distanceKm} km</strong></span>
+                    <span>Transport emission factor<strong>{FREIGHT_EMISSION_FACTOR_PER_TON_KM} kg CO₂e/ton-km</strong></span>
+                  </div>
+                  <div className="calculation-result">{formatNumber(stream.result.eVirgin, 2)} − ({formatNumber(stream.result.eReprocessing, 2)} + {formatNumber(stream.result.eTransport, 3)}) = <strong>{formatNumber(stream.result.netCO2eAvoided, 2)} kg CO₂e</strong></div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
+      </details>
 
-      {/* Mathematical Breakdown Table */}
-      <div style={{ background: 'white', padding: '24px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
-        <h3 style={{ fontSize: '1.2rem', color: '#0F172A', marginBottom: '16px', fontWeight: '700' }}>
-          ISO 14044 LCA Formula Breakdown
-        </h3>
-        <p style={{ fontSize: '0.9rem', color: '#475569', marginBottom: '20px' }}>
-          Formula: <code style={{ background: '#F1F5F9', padding: '2px 8px', borderRadius: '4px', fontFamily: 'monospace' }}>Net CO₂e Avoided = E_virgin - (E_reprocessing + E_transport)</code>
-        </p>
-
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ background: '#0F5132', color: 'white', textAlign: 'left' }}>
-              <th style={{ padding: '12px 16px' }}>Material Stream</th>
-              <th style={{ padding: '12px 16px' }}>Virgin Emissions (E_virgin)</th>
-              <th style={{ padding: '12px 16px' }}>Reprocessing (E_reprocessing)</th>
-              <th style={{ padding: '12px 16px' }}>Transport (E_transport)</th>
-              <th style={{ padding: '12px 16px' }}>Net CO₂e Avoided</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style={{ padding: '14px 16px', fontWeight: '600' }}>Corrugated Cardboard (12,500 units)</td>
-              <td style={{ padding: '14px 16px', color: '#DC2626' }}>+{totalCardboard.eVirgin} kg</td>
-              <td style={{ padding: '14px 16px', color: '#D97706' }}>-{totalCardboard.eReprocessing} kg</td>
-              <td style={{ padding: '14px 16px', color: '#D97706' }}>-{totalCardboard.eTransport} kg</td>
-              <td style={{ padding: '14px 16px', color: '#059669', fontWeight: '800' }}>{totalCardboard.netCO2eAvoided} kg</td>
-            </tr>
-            <tr style={{ background: '#F8FAFC' }}>
-              <td style={{ padding: '14px 16px', fontWeight: '600' }}>Euro Wooden Pallets (3,200 units)</td>
-              <td style={{ padding: '14px 16px', color: '#DC2626' }}>+{totalPallets.eVirgin} kg</td>
-              <td style={{ padding: '14px 16px', color: '#D97706' }}>-{totalPallets.eReprocessing} kg</td>
-              <td style={{ padding: '14px 16px', color: '#D97706' }}>-{totalPallets.eTransport} kg</td>
-              <td style={{ padding: '14px 16px', color: '#059669', fontWeight: '800' }}>{totalPallets.netCO2eAvoided} kg</td>
-            </tr>
-            <tr>
-              <td style={{ padding: '14px 16px', fontWeight: '600' }}>HDPE Chemical Drums (1,400 units)</td>
-              <td style={{ padding: '14px 16px', color: '#DC2626' }}>+{totalHDPE.eVirgin} kg</td>
-              <td style={{ padding: '14px 16px', color: '#D97706' }}>-{totalHDPE.eReprocessing} kg</td>
-              <td style={{ padding: '14px 16px', color: '#D97706' }}>-{totalHDPE.eTransport} kg</td>
-              <td style={{ padding: '14px 16px', color: '#059669', fontWeight: '800' }}>{totalHDPE.netCO2eAvoided} kg</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <section className="estimate-note" aria-labelledby="estimate-note-heading">
+        <Info size={21} />
+        <div><h2 id="estimate-note-heading">About this estimate</h2><p>This is an estimated environmental impact, not a certified measurement.</p><ul><li>Material quantity and category</li><li>Reuse or recycling pathway</li><li>Transport distance</li><li>Configured emission factors</li></ul><small>Last calculated: {exchanges.length ? 'When the dashboard loaded' : 'No completed exchanges yet'}</small></div>
+      </section>
     </div>
   );
 }
