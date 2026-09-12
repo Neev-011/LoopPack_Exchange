@@ -182,7 +182,7 @@ app.post('/api/v1/exchanges/completed', async (req, res) => {
 
 app.post('/api/v1/orders', async (req, res) => {
   try {
-    const { listingId, buyer, quantity, destination, paymentMethod } = req.body || {};
+    const { listingId, buyer, quantity, destination, deliveryAddress, paymentMethod, pickupDate, pickupTime, logisticsVehicle, logisticsCandidates } = req.body || {};
     if (!isCommercialRole(buyer?.role)) {
       return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can purchase materials.' });
     }
@@ -202,6 +202,13 @@ app.post('/api/v1/orders', async (req, res) => {
     if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0 || requestedQuantity > Number(listing.quantity)) {
       return res.status(400).json({ error: `Quantity must be between 1 and ${listing.quantity}.` });
     }
+    const transportDistanceKm = Number(logisticsVehicle?.estimate?.distanceKm);
+    const carbon = computeAvoidedCarbon(
+      listing.material_type,
+      requestedQuantity,
+      Number.isFinite(transportDistanceKm) && transportDistanceKm > 0 ? transportDistanceKm : Number(listing.distance_km || 10),
+      listing.grade
+    );
     const order = {
       id: `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       listingId: String(listing.id),
@@ -216,20 +223,39 @@ app.post('/api/v1/orders', async (req, res) => {
       unitPrice: Number(listing.price) || 0,
       totalPrice: (Number(listing.price) || 0) * requestedQuantity,
       destination: destination.trim(),
+      deliveryAddress: deliveryAddress || null,
       paymentMethod: paymentMethod.trim(),
-      status: 'completed',
+      pickupDate: pickupDate || null,
+      pickupTime: pickupTime || null,
+      status: 'pending',
+      logisticsStatus: 'pending',
+      logisticsCandidates: Array.isArray(logisticsCandidates) ? logisticsCandidates : [],
+      logisticsRequestHistory: [],
+      logisticsVehicle: logisticsVehicle
+        ? {
+            ...logisticsVehicle,
+            estimate: {
+              ...(logisticsVehicle.estimate || {}),
+              distanceKm: transportDistanceKm,
+              transportEmissionsKg: carbon.eTransport
+            }
+          }
+        : null,
+      transportDistanceKm: carbon.eTransport > 0 ? (carbon.eTransport / ((carbon.totalWeightKg / 1000) * 0.00016)) : null,
+      transportEmissionsKg: carbon.eTransport,
+      netCO2eAvoided: carbon.netCO2eAvoided,
       listingSnapshot: listing
     };
     await client`
       INSERT INTO sales_orders (
         id, listing_id, listing_title, seller_username, buyer_id, buyer_username, buyer_company,
         buyer_email, quantity, unit, unit_price, total_price, destination, payment_method,
-        status, listing_snapshot
+        pickup_date, pickup_time, delivery_address, status, logistics_status, logistics_vehicle, logistics_candidates, logistics_request_history, transport_distance_km, transport_emissions_kg, net_co2e_avoided, listing_snapshot
       ) VALUES (
         ${order.id}, ${order.listingId}, ${order.listingTitle}, ${order.sellerUsername}, ${order.buyerId},
         ${order.buyerUsername}, ${order.buyerCompany}, ${order.buyerEmail}, ${order.quantity}, ${order.unit},
         ${order.unitPrice}, ${order.totalPrice}, ${order.destination}, ${order.paymentMethod},
-        ${order.status}, ${JSON.stringify(order.listingSnapshot)}
+        ${order.pickupDate}, ${order.pickupTime}, ${order.deliveryAddress ? JSON.stringify(order.deliveryAddress) : null}, ${order.status}, ${order.logisticsStatus}, ${order.logisticsVehicle ? JSON.stringify(order.logisticsVehicle) : null}, ${JSON.stringify(order.logisticsCandidates)}, ${JSON.stringify(order.logisticsRequestHistory)}, ${order.transportDistanceKm}, ${order.transportEmissionsKg}, ${order.netCO2eAvoided}, ${JSON.stringify(order.listingSnapshot)}
       )
     `;
     await recordCompletedExchange({
@@ -240,7 +266,9 @@ app.post('/api/v1/orders', async (req, res) => {
         quantity: requestedQuantity,
         unit: listing.unit,
         grade: listing.grade,
-        distanceKm: Number(listing.distance_km || listing.distanceKm || 10)
+        distanceKm: Number.isFinite(transportDistanceKm) && transportDistanceKm > 0
+          ? transportDistanceKm
+          : Number(listing.distance_km || listing.distanceKm || 10)
       },
       buyer
     });
@@ -260,17 +288,99 @@ app.get('/api/v1/orders', async (req, res) => {
     if (!client) return res.json({ data: [] });
     const rows = req.query.role === 'buyer'
       ? await client`SELECT * FROM sales_orders WHERE buyer_username = ${username} ORDER BY created_at DESC`
-      : await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`;
+      : req.query.role === 'logistics'
+        ? await client`SELECT * FROM sales_orders WHERE logistics_vehicle->>'createdBy' = ${username} ORDER BY created_at DESC`
+        : await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`;
     res.json({ data: rows.map(row => ({
       id: row.id, listingId: row.listing_id, listingTitle: row.listing_title,
       sellerUsername: row.seller_username, buyerId: row.buyer_id, buyerUsername: row.buyer_username,
       buyerCompany: row.buyer_company, buyerEmail: row.buyer_email, quantity: Number(row.quantity),
       unit: row.unit, unitPrice: Number(row.unit_price), totalPrice: Number(row.total_price),
-      destination: row.destination, paymentMethod: row.payment_method, status: row.status,
+      destination: row.destination, deliveryAddress: row.delivery_address, paymentMethod: row.payment_method, status: row.status,
+      pickupDate: row.pickup_date, pickupTime: row.pickup_time, logisticsStatus: row.logistics_status, logisticsVehicle: row.logistics_vehicle,
+      logisticsCandidates: row.logistics_candidates, logisticsRequestHistory: row.logistics_request_history,
+      transportDistanceKm: Number(row.transport_distance_km), transportEmissionsKg: Number(row.transport_emissions_kg),
+      netCO2eAvoided: Number(row.net_co2e_avoided),
       listingSnapshot: row.listing_snapshot, createdAt: row.created_at
     })) });
   } catch (err) {
     res.status(500).json({ error: 'Could not load completed sales.' });
+  }
+});
+
+app.patch('/api/v1/orders/:id/logistics-status', async (req, res) => {
+  try {
+    const { username, role, status } = req.body || {};
+    if (role !== 'logistics') {
+      return res.status(403).json({ error: 'Only logistics partners can update transport requests.' });
+    }
+    if (!['accepted', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Transport requests can only be accepted or rejected.' });
+    }
+    const client = getNeonClient();
+    if (!client) return res.status(503).json({ error: 'Database is unavailable.' });
+    const orders = await client`
+      SELECT * FROM sales_orders
+      WHERE id = ${req.params.id}
+        AND logistics_vehicle->>'createdBy' = ${username}
+        AND logistics_status = 'pending'
+      LIMIT 1
+    `;
+    if (!orders.length) {
+      return res.status(404).json({ error: 'Pending transport request not found for this logistics partner.' });
+    }
+    const order = orders[0];
+    const currentVehicle = order.logistics_vehicle || {};
+    const history = Array.isArray(order.logistics_request_history) ? order.logistics_request_history : [];
+    const updatedHistory = [...history, {
+      vehicleId: currentVehicle.id,
+      vehicleName: currentVehicle.truckName,
+      provider: currentVehicle.companyName,
+      providerUsername: currentVehicle.createdBy,
+      status,
+      contactedAt: new Date().toISOString()
+    }];
+
+    if (status === 'accepted') {
+      const rows = await client`
+        UPDATE sales_orders
+        SET logistics_status = 'confirmed',
+            status = 'logistics_confirmed',
+            logistics_request_history = ${JSON.stringify(updatedHistory)}
+        WHERE id = ${req.params.id} AND logistics_status = 'pending'
+        RETURNING id, logistics_status, status, logistics_vehicle, logistics_request_history
+      `;
+      return res.json({ status: 'success', data: rows[0] });
+    }
+
+    const candidates = Array.isArray(order.logistics_candidates) ? order.logistics_candidates : [];
+    const contactedIds = new Set(updatedHistory.map(item => String(item.vehicleId)));
+    const nextVehicle = candidates.find(vehicle => !contactedIds.has(String(vehicle.id)));
+    if (!nextVehicle) {
+      const rows = await client`
+        UPDATE sales_orders
+        SET logistics_status = 'no_logistics_available',
+            status = 'no_logistics_available',
+            logistics_request_history = ${JSON.stringify(updatedHistory)}
+        WHERE id = ${req.params.id} AND logistics_status = 'pending'
+        RETURNING id, logistics_status, status, logistics_request_history
+      `;
+      return res.json({ status: 'success', data: rows[0] });
+    }
+
+    const rows = await client`
+      UPDATE sales_orders
+      SET logistics_status = 'pending',
+          status = 'pending',
+          logistics_vehicle = ${JSON.stringify(nextVehicle)},
+          logistics_request_history = ${JSON.stringify(updatedHistory)}
+      WHERE id = ${req.params.id} AND logistics_status = 'pending'
+      RETURNING id, logistics_status, status, logistics_vehicle, logistics_request_history
+    `;
+    res.json({ status: 'success', data: rows[0] });
+  } catch (err) {
+    console.error('[Orders] logistics status update failed:', err.message);
+    res.status(500).json({ error: 'Could not update the transport request.' });
   }
 });
 
@@ -722,7 +832,10 @@ app.get('/api/v1/trucks', async (req, res) => {
         capacityTons: Number(r.capacity_tons),
         originCity: r.origin_city,
         destinationCity: r.destination_city,
+        pickupAddress: r.pickup_address,
+        deliveryAddress: r.delivery_address,
         availableDate: r.available_date,
+        availableTime: r.available_time,
         ratePerKm: Number(r.rate_per_km),
         driverName: r.driver_name,
         driverPhone: r.driver_phone,
@@ -756,7 +869,10 @@ app.post('/api/v1/trucks', async (req, res) => {
     capacityTons,
     originCity,
     destinationCity,
+    pickupAddress,
+    deliveryAddress,
     availableDate,
+    availableTime,
     ratePerKm,
     driverName,
     driverPhone,
@@ -786,7 +902,10 @@ app.post('/api/v1/trucks', async (req, res) => {
     capacityTons: cleanCap,
     originCity,
     destinationCity,
+    pickupAddress: pickupAddress || null,
+    deliveryAddress: deliveryAddress || null,
     availableDate: availableDate || 'Available Now',
+    availableTime: availableTime || '09:00',
     ratePerKm: cleanRate,
     driverName: driverName || 'Assigned Carrier Driver',
     driverPhone: driverPhone || '+91 98000 00000',
@@ -802,10 +921,10 @@ app.post('/api/v1/trucks', async (req, res) => {
     try {
       await client`
         INSERT INTO trucks (
-          id, truck_name, vehicle_reg, capacity_tons, origin_city, destination_city, available_date, rate_per_km, driver_name, driver_phone, status, created_by, company_name, company_email, created_at
+          id, truck_name, vehicle_reg, capacity_tons, origin_city, destination_city, pickup_address, delivery_address, available_date, available_time, rate_per_km, driver_name, driver_phone, status, created_by, company_name, company_email, created_at
         ) VALUES (
           ${newTruck.id}, ${newTruck.truckName}, ${newTruck.vehicleReg}, ${newTruck.capacityTons},
-          ${newTruck.originCity}, ${newTruck.destinationCity}, ${newTruck.availableDate}, ${newTruck.ratePerKm},
+          ${newTruck.originCity}, ${newTruck.destinationCity}, ${newTruck.pickupAddress ? JSON.stringify(newTruck.pickupAddress) : null}, ${newTruck.deliveryAddress ? JSON.stringify(newTruck.deliveryAddress) : null}, ${newTruck.availableDate}, ${newTruck.availableTime}, ${newTruck.ratePerKm},
           ${newTruck.driverName}, ${newTruck.driverPhone}, ${newTruck.status}, ${newTruck.createdBy},
           ${newTruck.companyName}, ${newTruck.companyEmail}, ${newTruck.createdAt}
         )

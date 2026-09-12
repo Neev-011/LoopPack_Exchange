@@ -22,8 +22,42 @@ import {
   Leaf
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import AddressForm from '../components/common/AddressForm';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
+
+function getTodayDate() {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${today.getFullYear()}-${month}-${day}`;
+}
+
+function formatAvailability(date, time) {
+  if (!date) return time || 'Date to be confirmed';
+
+  const parsedDate = new Date(`${date}T00:00:00`);
+  const formattedDate = Number.isNaN(parsedDate.getTime())
+    ? date
+    : parsedDate.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+
+  if (!time) return formattedDate;
+
+  const [hours, minutes] = String(time).split(':').map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return `${formattedDate} · ${time}`;
+  }
+
+  const formattedTime = new Date(2000, 0, 1, hours, minutes).toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+  return `${formattedDate} · ${formattedTime}`;
+}
 
 export default function EcoLogisticsPage({ setActiveTab }) {
   const { currentUser, login } = useAuth();
@@ -32,15 +66,29 @@ export default function EcoLogisticsPage({ setActiveTab }) {
   const [truckName, setTruckName] = useState('');
   const [vehicleReg, setVehicleReg] = useState('');
   const [capacityTons, setCapacityTons] = useState(3.5);
+  const [pickupAddress, setPickupAddress] = useState({
+    state: 'Maharashtra',
+    city: 'Navi Mumbai',
+    streetArea: 'Mahape',
+    landmark: ''
+  });
+  const [deliveryAddress, setDeliveryAddress] = useState({
+    state: 'Maharashtra',
+    city: 'Bhiwandi',
+    streetArea: 'Bhiwandi Gateway',
+    landmark: ''
+  });
+  // Retained for the inactive legacy optimizer markup.
   const [originCity, setOriginCity] = useState('Mahape, Navi Mumbai');
   const [destinationCity, setDestinationCity] = useState('Bhiwandi Gateway');
-  const [availableDate, setAvailableDate] = useState('Available Today');
+  const [availableDate, setAvailableDate] = useState(getTodayDate);
+  const [availableTime, setAvailableTime] = useState('09:00');
   const [ratePerKm, setRatePerKm] = useState(32);
-  const [driverName, setDriverName] = useState('Ramesh Sharma');
-  const [driverPhone, setDriverPhone] = useState('+91 98201 48291');
+  const [driverName, setDriverName] = useState('');
 
   // Page & Solver State
   const [listedTrucks, setListedTrucks] = useState([]);
+  const [transportRequests, setTransportRequests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState(null);
@@ -67,6 +115,18 @@ export default function EcoLogisticsPage({ setActiveTab }) {
       console.warn('Backend fetch offline for trucks:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTransportRequests = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/orders?username=${encodeURIComponent(currentUser.username)}&role=logistics`);
+      if (res.ok) {
+        const json = await res.json();
+        setTransportRequests(Array.isArray(json.data) ? json.data : []);
+      }
+    } catch (err) {
+      console.warn('Could not load transport requests:', err);
     }
   };
 
@@ -100,7 +160,7 @@ export default function EcoLogisticsPage({ setActiveTab }) {
   useEffect(() => {
     if (isLogisticsUser) {
       fetchTrucks();
-      handleRunVrpOptimization();
+      fetchTransportRequests();
     }
   }, [currentUser]);
 
@@ -125,12 +185,13 @@ export default function EcoLogisticsPage({ setActiveTab }) {
       truckName: truckName || 'Tata 407 Electric Cargo Box',
       vehicleReg: vehicleReg || 'MH-04-FK-8492',
       capacityTons: Number(capacityTons) || 2.5,
-      originCity: originCity || 'Navi Mumbai',
-      destinationCity: destinationCity || 'Bhiwandi',
+      originCity: pickupAddress.city,
+      destinationCity: deliveryAddress.city,
+      pickupAddress,
+      deliveryAddress,
       availableDate: availableDate || 'Available Now',
+      availableTime: availableTime || '09:00',
       ratePerKm: Number(ratePerKm) || 30,
-      driverName: driverName || 'Ramesh Sharma',
-      driverPhone: driverPhone || '+91 98000 00000',
       createdBy: currentUser.username,
       companyName: currentUser.companyName,
       companyEmail: currentUser.email,
@@ -194,6 +255,23 @@ export default function EcoLogisticsPage({ setActiveTab }) {
     }
   };
 
+  const handleTransportRequestDecision = async (orderId, status) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/orders/${orderId}/logistics-status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser.username, role: currentUser.role, status })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Could not update transport request.');
+      setTransportRequests(current => current.map(request => request.id === orderId
+        ? { ...request, logisticsStatus: data.data.logistics_status, status: data.data.status }
+        : request));
+    } catch (err) {
+      setErrorMsg(err.message);
+    }
+  };
+
   // ACCESS GATE: IF NOT A LOGISTICS ACCOUNT
   if (!isLogisticsUser) {
     return (
@@ -224,7 +302,7 @@ export default function EcoLogisticsPage({ setActiveTab }) {
             Logistics Carrier Account Required
           </h2>
           <p style={{ color: '#64748B', fontSize: '0.96rem', maxWidth: '560px', margin: '0 auto 28px', lineHeight: 1.6 }}>
-            The Eco-Logistics Fleet Portal is exclusively reserved for registered logistics companies and freight operators to list trucks, set backhaul corridors, and run Google OR-Tools / OSRM VRP dispatch solvers.
+            The Logistics Partner portal is reserved for registered logistics organizations to list available vehicles and routes for buyers.
           </p>
 
           <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '20px', borderRadius: '12px', marginBottom: '28px', textAlign: 'left' }}>
@@ -277,26 +355,15 @@ export default function EcoLogisticsPage({ setActiveTab }) {
             <span style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', padding: '3px 10px', borderRadius: '16px', fontSize: '0.76rem', fontWeight: '700', textTransform: 'uppercase' }}>
               Verified Logistics Partner
             </span>
-            <span style={{ background: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', padding: '3px 10px', borderRadius: '16px', fontSize: '0.76rem', fontWeight: '700' }}>
-              Google OR-Tools & OSRM Engine
-            </span>
           </div>
           <h2 style={{ fontSize: '1.8rem', color: '#0F172A', fontWeight: '800', marginBottom: '6px' }}>
-            Logistics Fleet & VRP Backhaul Portal 🚛
+            Logistics Vehicle Availability 🚛
           </h2>
           <p style={{ color: '#64748B', fontSize: '0.92rem' }}>
-            Welcome, <strong>{currentUser.companyName}</strong> (@{currentUser.username})! List your available trucks and optimize backhaul routes using Google OR-Tools and OSRM.
+            Welcome, <strong>{currentUser.companyName}</strong> (@{currentUser.username})! Tell buyers when and where your vehicle is available for material pickup.
           </p>
         </div>
 
-        <button
-          onClick={handleRunVrpOptimization}
-          disabled={solvingVrp}
-          className="btn-primary"
-          style={{ padding: '10px 18px', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '8px' }}
-        >
-          <RefreshCw size={16} className={solvingVrp ? 'spin' : ''} /> {solvingVrp ? 'Solving Route Matrix...' : 'Run OR-Tools / OSRM VRP Solver'}
-        </button>
       </div>
 
       {/* Success / Error Alerts */}
@@ -313,17 +380,113 @@ export default function EcoLogisticsPage({ setActiveTab }) {
         </div>
       )}
 
-      {/* GOOGLE OR-TOOLS & OSRM ROUTE OPTIMIZATION DASHBOARD */}
-      {vrpSolution && (
-        <div style={{
-          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-          color: 'white',
-          borderRadius: '16px',
-          padding: '24px',
-          marginBottom: '32px',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
-          border: '1px solid rgba(255,255,255,0.1)'
-        }}>
+      <div style={{ background: 'white', padding: '28px', borderRadius: '14px', border: '1px solid #E2E8F0', marginBottom: '32px' }}>
+        <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Truck size={20} color="#10B981" /> Transport Requests
+        </h3>
+        {transportRequests.length === 0 ? (
+          <p style={{ color: '#64748B', margin: 0 }}>No transport requests yet.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: '14px' }}>
+            {transportRequests.map(request => {
+              const vehicle = request.logisticsVehicle || {};
+              const snapshot = request.listingSnapshot || {};
+              const estimate = vehicle.estimate || {};
+              const requestStatus = String(request.logisticsStatus || 'pending').toLowerCase();
+              return (
+                <div key={request.id} style={{ border: '1px solid #E2E8F0', padding: '16px', borderRadius: '10px', background: '#F8FAFC' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                    <strong style={{ color: '#0F172A' }}>{request.listingTitle || snapshot.title || 'Material'} — {request.quantity} {request.unit || 'units'}</strong>
+                    <span style={{ color: requestStatus === 'pending' ? '#92400E' : '#047857', fontWeight: '700', fontSize: '0.78rem' }}>
+                      {requestStatus.toUpperCase()}
+                    </span>
+                  </div>
+                  <div style={{ color: '#475569', fontSize: '0.88rem', marginBottom: '6px' }}>
+                    {snapshot.location || 'Pickup location'} → {request.destination || 'Delivery location'}
+                  </div>
+                  <div style={{ color: '#475569', fontSize: '0.82rem', marginBottom: '6px' }}>
+                    {formatAvailability(request.pickupDate, request.pickupTime || vehicle.availableTime)}
+                  </div>
+                  <div style={{ color: '#475569', fontSize: '0.82rem' }}>
+                    Estimated distance: <strong>{estimate.distanceKm || request.transportDistanceKm || '—'} km</strong>
+                    {' · '}Estimated payout: <strong>₹{Number(estimate.transportCost || 0).toLocaleString('en-IN')}</strong>
+                  </div>
+                  {requestStatus === 'pending' && (
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                      <button type="button" className="btn-primary" onClick={() => handleTransportRequestDecision(request.id, 'accepted')} style={{ padding: '8px 12px', fontSize: '0.82rem' }}>Accept</button>
+                      <button type="button" className="btn-secondary" onClick={() => handleTransportRequestDecision(request.id, 'rejected')} style={{ padding: '8px 12px', fontSize: '0.82rem' }}>Reject</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* FORM: LIST A NEW VEHICLE */}
+      <div style={{ background: 'white', padding: '28px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 14px rgba(0,0,0,0.04)', marginBottom: '32px' }}>
+        <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <PlusCircle size={20} color="#10B981" /> List an Available Vehicle
+        </h3>
+        <p style={{ color: '#64748B', fontSize: '0.9rem', marginBottom: '18px' }}>
+          Tell buyers when and where your vehicle is available for material pickup.
+        </p>
+
+        <form onSubmit={handleSubmitTruck}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '18px' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: '600', fontSize: '0.88rem', marginBottom: '6px', color: '#334155' }}>Vehicle Model / Name</label>
+              <input type="text" placeholder="e.g. Tata 407 Electric Box Truck" style={{ width: '100%', padding: '11px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.92rem' }} value={truckName} onChange={e => setTruckName(e.target.value)} required />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: '600', fontSize: '0.88rem', marginBottom: '6px', color: '#334155' }}>Registration Number</label>
+              <input type="text" placeholder="e.g. MH-04-FK-8492" style={{ width: '100%', padding: '11px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.92rem' }} value={vehicleReg} onChange={e => setVehicleReg(e.target.value)} required />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '18px' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: '600', fontSize: '0.88rem', marginBottom: '6px', color: '#334155' }}>Payload Capacity (Tons)</label>
+              <input type="number" step="0.5" min="0.5" style={{ width: '100%', padding: '11px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.92rem' }} value={capacityTons} onChange={e => setCapacityTons(Math.max(0.5, Number(e.target.value) || 0.5))} required />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '22px' }}>
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px' }}>
+              <h4 style={{ margin: '0 0 12px', color: '#0F172A' }}>Pickup Address</h4>
+              <AddressForm value={pickupAddress} onChange={setPickupAddress} idPrefix="pickup-address" required />
+            </div>
+            <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px' }}>
+              <h4 style={{ margin: '0 0 12px', color: '#0F172A' }}>Delivery Address</h4>
+              <AddressForm value={deliveryAddress} onChange={setDeliveryAddress} idPrefix="delivery-address" required />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '18px', marginBottom: '22px' }}>
+            <div>
+              <label style={{ display: 'block', fontWeight: '600', fontSize: '0.88rem', marginBottom: '6px', color: '#334155' }}>Available Date</label>
+              <input type="date" min={getTodayDate()} style={{ width: '100%', padding: '11px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.92rem' }} value={availableDate} onChange={e => setAvailableDate(e.target.value)} required />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: '600', fontSize: '0.88rem', marginBottom: '6px', color: '#334155' }}>Available From</label>
+              <input type="time" style={{ width: '100%', padding: '11px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.92rem' }} value={availableTime} onChange={e => setAvailableTime(e.target.value)} required />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontWeight: '600', fontSize: '0.88rem', marginBottom: '6px', color: '#334155' }}>Price per km (₹)</label>
+              <input type="number" min="0" style={{ width: '100%', padding: '11px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.92rem' }} value={ratePerKm} onChange={e => setRatePerKm(Math.max(0, Number(e.target.value) || 0))} required />
+            </div>
+          </div>
+
+          <button type="submit" disabled={submitting} className="btn-primary" style={{ width: '100%', padding: '12px', fontSize: '0.95rem', justifyContent: 'center' }}>
+            <Truck size={18} /> {submitting ? 'Listing Vehicle...' : 'List Vehicle'}
+          </button>
+        </form>
+      </div>
+
+      {/* Future optimization workspace retained but not presented in the MVP. */}
+      {false && vrpSolution && (
+        <div style={{ display: 'none' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{ background: '#10B981', padding: '8px', borderRadius: '10px' }}>
@@ -331,7 +494,7 @@ export default function EcoLogisticsPage({ setActiveTab }) {
               </div>
               <div>
                 <h3 style={{ fontSize: '1.25rem', fontWeight: '800', margin: 0, color: 'white' }}>
-                  Google OR-Tools & OSRM Backhaul Solver
+                  Logistics Matching
                 </h3>
                 <div style={{ fontSize: '0.78rem', color: '#94A3B8' }}>
                   {vrpSolution.solverEngine} • Route ID: <span style={{ color: '#34D399', fontWeight: '700' }}>{vrpSolution.routeId}</span>
@@ -348,14 +511,14 @@ export default function EcoLogisticsPage({ setActiveTab }) {
               fontSize: '0.78rem',
               fontWeight: '700'
             }}>
-              {vrpSolution.isRealOSRM ? '⚡ Live OSRM Road Geometry' : '📐 Haversine Detour Model'}
+              {vrpSolution.isRealOSRM ? 'Road distance data' : 'Estimated route data'}
             </span>
           </div>
 
           {/* Metric KPI Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '22px' }}>
             <div style={{ background: 'rgba(255,255,255,0.06)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <div style={{ fontSize: '0.75rem', color: '#94A3B8', textTransform: 'uppercase', fontWeight: '700' }}>Driving Distance</div>
+              <div style={{ fontSize: '0.75rem', color: '#94A3B8', textTransform: 'uppercase', fontWeight: '700' }}>Estimated Distance</div>
               <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#38BDF8', marginTop: '4px' }}>
                 {vrpSolution.totalDistanceKm} <span style={{ fontSize: '0.85rem' }}>km</span>
               </div>
@@ -363,33 +526,33 @@ export default function EcoLogisticsPage({ setActiveTab }) {
             </div>
 
             <div style={{ background: 'rgba(255,255,255,0.06)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <div style={{ fontSize: '0.75rem', color: '#94A3B8', textTransform: 'uppercase', fontWeight: '700' }}>Deadhead Saved</div>
+              <div style={{ fontSize: '0.75rem', color: '#94A3B8', textTransform: 'uppercase', fontWeight: '700' }}>Route Compatibility</div>
               <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#34D399', marginTop: '4px' }}>
                 {vrpSolution.deadheadSavedKm} <span style={{ fontSize: '0.85rem' }}>km</span>
               </div>
-              <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '2px' }}>Avoided empty return</div>
+              <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '2px' }}>Calculated route comparison</div>
             </div>
 
             <div style={{ background: 'rgba(255,255,255,0.06)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <div style={{ fontSize: '0.75rem', color: '#94A3B8', textTransform: 'uppercase', fontWeight: '700' }}>Fuel Saved</div>
+              <div style={{ fontSize: '0.75rem', color: '#94A3B8', textTransform: 'uppercase', fontWeight: '700' }}>Estimated Travel Time</div>
               <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#FBBF24', marginTop: '4px' }}>
-                {vrpSolution.fuelSavedLiters} <span style={{ fontSize: '0.85rem' }}>Liters</span>
+                {vrpSolution.fuelSavedLiters} <span style={{ fontSize: '0.85rem' }}>mins</span>
               </div>
-              <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '2px' }}>Diesel burn reduction</div>
+              <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '2px' }}>Route estimate</div>
             </div>
 
             <div style={{ background: 'rgba(255,255,255,0.06)', padding: '14px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.08)' }}>
-              <div style={{ fontSize: '0.75rem', color: '#94A3B8', textTransform: 'uppercase', fontWeight: '700' }}>CO₂ Emissions Avoided</div>
+              <div style={{ fontSize: '0.75rem', color: '#94A3B8', textTransform: 'uppercase', fontWeight: '700' }}>Estimated CO₂e</div>
               <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#A7F3D0', marginTop: '4px' }}>
                 {vrpSolution.avoidedCo2Kg} <span style={{ fontSize: '0.85rem' }}>kg</span>
               </div>
-              <div style={{ fontSize: '0.72rem', color: '#34D399', marginTop: '2px' }}>-{vrpSolution.emissionsReductionPercent}% Carbon reduction</div>
+              <div style={{ fontSize: '0.72rem', color: '#34D399', marginTop: '2px' }}>Calculation estimate</div>
             </div>
           </div>
 
           {/* OR-Tools Waypoint Stop Sequence */}
           <h4 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#CBD5E1', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Route size={16} color="#38BDF8" /> Google OR-Tools 2-Opt Solved Waypoint Sequence:
+            <Route size={16} color="#38BDF8" /> Available Route Options:
           </h4>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -439,8 +602,8 @@ export default function EcoLogisticsPage({ setActiveTab }) {
         </div>
       )}
 
-      {/* FORM: LIST A NEW TRUCK */}
-      <div style={{ background: 'white', padding: '28px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 14px rgba(0,0,0,0.04)', marginBottom: '32px' }}>
+      {/* Retained legacy form markup for compatibility; the simplified form above is active. */}
+      <div style={{ display: 'none', background: 'white', padding: '28px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 14px rgba(0,0,0,0.04)', marginBottom: '32px' }}>
         <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <PlusCircle size={20} color="#10B981" /> List an Available Truck / Backhaul Vehicle
         </h3>
@@ -557,78 +720,64 @@ export default function EcoLogisticsPage({ setActiveTab }) {
         </form>
       </div>
 
-      {/* LISTED FLEET DIRECTORY */}
+      {/* AVAILABLE VEHICLES */}
       <div style={{ background: 'white', padding: '28px', borderRadius: '14px', border: '1px solid #E2E8F0' }}>
         <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', marginBottom: '18px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Truck size={20} color="#3B82F6" /> Available Listed Fleet Vehicles ({listedTrucks.length})
+          <Truck size={20} color="#3B82F6" /> Available Vehicles ({listedTrucks.length})
         </h3>
 
         {listedTrucks.length === 0 ? (
-          <p style={{ color: '#64748B' }}>No trucks listed yet. Fill out the form above to post your first vehicle.</p>
+          <p style={{ color: '#64748B' }}>No vehicles listed yet. Fill out the form above to add an available vehicle.</p>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
             {listedTrucks.map(truck => (
-              <div key={truck.id} style={{ border: '1px solid #E2E8F0', padding: '20px', borderRadius: '12px', background: '#F8FAFC' }}>
+              <div key={truck.id} style={{ border: '1px solid #E2E8F0', padding: '18px', borderRadius: '12px', background: '#F8FAFC' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                  <h4 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0F172A' }}>{truck.truckName}</h4>
-                  <span style={{ background: '#ECFDF5', color: '#047857', padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: '700' }}>
-                    {truck.status ? truck.status.toUpperCase() : 'AVAILABLE'}
+                  <div>
+                    <span style={{ display: 'block', color: '#64748B', fontSize: '0.76rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '3px' }}>Vehicle</span>
+                    <h4 style={{ fontSize: '1.05rem', fontWeight: '800', color: '#0F172A', paddingRight: '10px', margin: 0 }}>{truck.truckName}</h4>
+                  </div>
+                  <span style={{
+                    background: truck.status === 'accepted' ? '#FEF3C7' : '#ECFDF5',
+                    color: truck.status === 'accepted' ? '#92400E' : '#047857',
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    fontSize: '0.72rem',
+                    fontWeight: '700',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {truck.status === 'accepted' ? 'BOOKED' : 'AVAILABLE'}
                   </span>
                 </div>
 
-                <div style={{ fontSize: '0.85rem', color: '#475569', marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div>🚛 Registration: <strong>{truck.vehicleReg}</strong></div>
-                  <div>⚖️ Capacity: <strong>{truck.capacityTons} Tons</strong></div>
-                  <div>📍 Route: <strong>{truck.originCity} ➔ {truck.destinationCity}</strong></div>
-                  <div>📅 Availability: <strong>{truck.availableDate}</strong></div>
-                  <div>💰 Rate: <strong>₹{truck.ratePerKm} / km</strong></div>
-                  <div>👤 Driver: <strong>{truck.driverName}</strong> ({truck.driverPhone})</div>
+                <div style={{ fontSize: '0.88rem', color: '#475569', marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                  <div><span style={{ color: '#64748B' }}>Route</span><br /><strong style={{ color: '#0F172A' }}>{truck.originCity} → {truck.destinationCity}</strong></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div><span style={{ color: '#64748B' }}>Capacity</span><br /><strong style={{ color: '#0F172A' }}>{truck.capacityTons} tons</strong></div>
+                    <div><span style={{ color: '#64748B' }}>Price</span><br /><strong style={{ color: '#0F172A' }}>₹{truck.ratePerKm}/km</strong></div>
+                  </div>
+                  <div><span style={{ color: '#64748B' }}>Availability</span><br /><strong style={{ color: '#0F172A' }}>{formatAvailability(truck.availableDate, truck.availableTime)}</strong></div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                   <button
-                    onClick={() => handleRunVrpOptimization(truck.originCity, truck.destinationCity)}
+                    type="button"
+                    onClick={() => window.alert(`${truck.truckName}\n${truck.originCity} → ${truck.destinationCity}\nCapacity: ${truck.capacityTons} tons\nAvailable: ${formatAvailability(truck.availableDate, truck.availableTime)}\nRate: ₹${truck.ratePerKm}/km`)}
                     style={{
-                      flex: 1,
-                      padding: '8px',
+                      padding: '8px 12px',
                       borderRadius: '8px',
                       border: '1px solid #BFDBFE',
                       background: '#EFF6FF',
                       color: '#1D4ED8',
                       fontSize: '0.82rem',
                       fontWeight: '700',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px'
+                      cursor: 'pointer'
                     }}
                   >
-                    <Route size={14} /> Optimize Route
+                    View Details
                   </button>
-
                   {truck.createdBy === currentUser.username && (
                     <>
-                    <button
-                      onClick={() => handleRideDecision(truck.id, 'accepted')}
-                      style={{
-                        padding: '8px 12px', borderRadius: '8px', border: '1px solid #86EFAC',
-                        background: '#F0FDF4', color: '#166534', fontSize: '0.82rem',
-                        fontWeight: '700', cursor: 'pointer'
-                      }}
-                    >
-                      Accept
-                    </button>
-                    <button
-                      onClick={() => handleRideDecision(truck.id, 'rejected')}
-                      style={{
-                        padding: '8px 12px', borderRadius: '8px', border: '1px solid #FCA5A5',
-                        background: '#FEF2F2', color: '#991B1B', fontSize: '0.82rem',
-                        fontWeight: '700', cursor: 'pointer'
-                      }}
-                    >
-                      Reject
-                    </button>
                     <button
                       onClick={() => handleDeleteTruck(truck.id)}
                       style={{
