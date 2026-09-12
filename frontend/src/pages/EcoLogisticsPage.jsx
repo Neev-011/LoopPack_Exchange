@@ -325,44 +325,15 @@ export default function EcoLogisticsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           
           {activeTab === 'route-visualizer' ? (
-            <div style={{ background: 'white', padding: '24px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(0,0,0,0.04)' }}>
+            <div style={{ background: '#E8ECF2', padding: '24px', borderRadius: '14px', border: '1px solid #C4CDD9', boxShadow: '0 4px 16px rgba(0,0,0,0.07)' }}>
+
               
               {/* Route Selector Chips */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Route size={20} color="#10B981" />
-                  <span style={{ fontWeight: '800', fontSize: '1.08rem', color: '#0F172A' }}>
-                    Select Route to Inspect Distances:
-                  </span>
-                </div>
-                
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {PRESET_ROUTES.map(route => {
-                    const isSelected = route.id === selectedRouteId;
-                    return (
-                      <button
-                        key={route.id}
-                        onClick={() => setSelectedRouteId(route.id)}
-                        style={{
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                          border: isSelected ? '2px solid #10B981' : '1px solid #CBD5E1',
-                          background: isSelected ? '#ECFDF5' : '#F8FAFC',
-                          color: isSelected ? '#047857' : '#334155',
-                          fontWeight: '700',
-                          fontSize: '0.82rem',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '6px'
-                        }}
-                      >
-                        <span>#{route.id}</span>
-                        <span style={{ fontSize: '0.74rem', color: '#64748B' }}>({route.stops.length} stops)</span>
-                      </button>
-                    );
-                  })}
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '20px' }}>
+                <Route size={20} color="#10B981" />
+                <span style={{ fontWeight: '800', fontSize: '1.08rem', color: '#0F172A' }}>
+                  Select Route to Inspect Distances:
+                </span>
               </div>
 
               {/* Top Route Overview Card */}
@@ -428,9 +399,7 @@ export default function EcoLogisticsPage() {
                   <h4 style={{ fontSize: '1.05rem', color: '#0F172A', fontWeight: '800', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Milestone size={18} color="#10B981" /> Pickup & Drop Sequence with Leg Distances
                   </h4>
-                  <p style={{ fontSize: '0.82rem', color: '#64748B' }}>
-                    Distances in kilometers between each sequential stop and cumulative distance to the final drop-off facility.
-                  </p>
+
                 </div>
                 <div style={{ background: '#F1F5F9', padding: '4px 10px', borderRadius: '8px', fontSize: '0.78rem', color: '#475569', fontWeight: '600' }}>
                   Destination: <strong style={{ color: '#047857' }}>{dropPoint.title}</strong>
@@ -706,7 +675,8 @@ export default function EcoLogisticsPage() {
             </div>
           ) : (
             /* Interactive Pickup & Drop Distance Calculator Tab */
-            <div style={{ background: 'white', padding: '24px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(0,0,0,0.04)' }}>
+            <div style={{ background: '#E8ECF2', padding: '24px', borderRadius: '14px', border: '1px solid #C4CDD9', boxShadow: '0 4px 16px rgba(0,0,0,0.07)' }}>
+
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                 <Calculator size={22} color="#10B981" />
                 <h3 style={{ fontSize: '1.25rem', color: '#0F172A', fontWeight: '800' }}>
@@ -747,7 +717,6 @@ export default function EcoLogisticsPage() {
                   </select>
 
                   <div style={{ marginTop: '12px', fontSize: '0.78rem', color: '#64748B', lineHeight: '1.5' }}>
-                    <div><strong>Coordinates:</strong> {calcMetrics.pickup.lat}°N, {calcMetrics.pickup.lon}°E</div>
                     <div><strong>Typical Packaging:</strong> {calcMetrics.pickup.defaultMaterial}</div>
                   </div>
                 </div>
@@ -779,7 +748,6 @@ export default function EcoLogisticsPage() {
                   </select>
 
                   <div style={{ marginTop: '12px', fontSize: '0.78rem', color: '#64748B', lineHeight: '1.5' }}>
-                    <div><strong>Coordinates:</strong> {calcMetrics.drop.lat}°N, {calcMetrics.drop.lon}°E</div>
                     <div><strong>Facility Process:</strong> {calcMetrics.drop.facilityType}</div>
                   </div>
                 </div>
@@ -879,7 +847,7 @@ export default function EcoLogisticsPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
           
           {/* Backhaul Carrier Fleet Card */}
-          <div style={{ background: 'white', padding: '22px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 16px rgba(0,0,0,0.04)' }}>
+          <div style={{ background: '#E8ECF2', padding: '22px', borderRadius: '14px', border: '1px solid #C4CDD9', boxShadow: '0 4px 16px rgba(0,0,0,0.07)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
               <h3 style={{ fontSize: '1.1rem', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: '800' }}>
                 <Truck size={20} color="#10B981" /> Backhaul Carrier Fleet
@@ -901,6 +869,7 @@ export default function EcoLogisticsPage() {
                 style={{
                   border: selectedRouteId === 'VR-8042' ? '2px solid #10B981' : '1px solid #E2E8F0',
                   background: selectedRouteId === 'VR-8042' ? '#F0FDF4' : '#FFFFFF',
+                  boxShadow: selectedRouteId === 'VR-8042' ? '0 2px 8px rgba(16, 185, 129, 0.12)' : '0 1px 4px rgba(0, 0, 0, 0.04)',
                   padding: '14px',
                   borderRadius: '10px',
                   cursor: 'pointer',
@@ -939,6 +908,7 @@ export default function EcoLogisticsPage() {
                 style={{
                   border: selectedRouteId === 'VR-9104' ? '2px solid #10B981' : '1px solid #E2E8F0',
                   background: selectedRouteId === 'VR-9104' ? '#F0FDF4' : '#FFFFFF',
+                  boxShadow: selectedRouteId === 'VR-9104' ? '0 2px 8px rgba(16, 185, 129, 0.12)' : '0 1px 4px rgba(0, 0, 0, 0.04)',
                   padding: '14px',
                   borderRadius: '10px',
                   cursor: 'pointer',
@@ -977,6 +947,7 @@ export default function EcoLogisticsPage() {
                 style={{
                   border: selectedRouteId === 'VR-4210' ? '2px solid #10B981' : '1px solid #E2E8F0',
                   background: selectedRouteId === 'VR-4210' ? '#F0FDF4' : '#FFFFFF',
+                  boxShadow: selectedRouteId === 'VR-4210' ? '0 2px 8px rgba(16, 185, 129, 0.12)' : '0 1px 4px rgba(0, 0, 0, 0.04)',
                   padding: '14px',
                   borderRadius: '10px',
                   cursor: 'pointer',
