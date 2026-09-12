@@ -17,7 +17,7 @@ function userBody(user) {
   return { userId: user.id, username: user.username, companyName: user.companyName, role: user.role };
 }
 
-export default function AccountHubPage({ view = 'materials' }) {
+export default function AccountHubPage({ view = 'materials', setActiveTab }) {
   const { currentUser } = useAuth();
   const [inquiries, setInquiries] = useState([]);
   const [listings, setListings] = useState([]);
@@ -156,6 +156,71 @@ export default function AccountHubPage({ view = 'materials' }) {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+      {/* Account Hub Navigation Tabs */}
+      {setActiveTab && (
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => setActiveTab('account')}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '10px',
+              border: view === 'materials' ? '1px solid #10B981' : '1px solid #CBD5E1',
+              background: view === 'materials' ? '#ECFDF5' : 'white',
+              color: view === 'materials' ? '#047857' : '#475569',
+              fontWeight: '700',
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            📦 My Listed Materials
+          </button>
+          <button
+            onClick={() => setActiveTab('purchases')}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '10px',
+              border: view === 'purchases' ? '1px solid #10B981' : '1px solid #CBD5E1',
+              background: view === 'purchases' ? '#ECFDF5' : 'white',
+              color: view === 'purchases' ? '#047857' : '#475569',
+              fontWeight: '700',
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            🛒 My Purchases
+          </button>
+          <button
+            onClick={() => setActiveTab('sales')}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '10px',
+              border: view === 'sales' ? '1px solid #10B981' : '1px solid #CBD5E1',
+              background: view === 'sales' ? '#ECFDF5' : 'white',
+              color: view === 'sales' ? '#047857' : '#475569',
+              fontWeight: '700',
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            💰 Sales History
+          </button>
+          <button
+            onClick={() => setActiveTab('inquiries')}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '10px',
+              border: view === 'inquiries' ? '1px solid #10B981' : '1px solid #CBD5E1',
+              background: view === 'inquiries' ? '#ECFDF5' : 'white',
+              color: view === 'inquiries' ? '#047857' : '#475569',
+              fontWeight: '700',
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            💬 B2B Inquiries & Chat
+          </button>
+        </div>
+      )}
       <h2 style={{ color: '#0F172A', marginBottom: 6 }}>
         {view === 'materials' ? 'My Materials' : view === 'purchases' ? 'My Purchases' : view === 'sales' ? 'Sales History' : 'My Inquiries'}
       </h2>

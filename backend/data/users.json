@@ -91,5 +91,18 @@
     "securityQuestion": "What is your company's founding hub city?",
     "securityAnswer": "",
     "createdAt": "2026-09-12T16:19:50.119Z"
+  },
+  {
+    "id": "usr_1789230394404",
+    "username": "jeel123",
+    "companyName": "j123",
+    "email": "123@gmail.com",
+    "password": "1234",
+    "role": "supplier",
+    "roleLabel": "Packaging Generator / Supplier",
+    "industry": "Logistics & Warehousing",
+    "securityQuestion": "What is your company's founding hub city?",
+    "securityAnswer": "gondal",
+    "createdAt": "2026-09-12T16:26:34.404Z"
   }
 ]
