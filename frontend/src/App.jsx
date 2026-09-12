@@ -26,6 +26,8 @@ export default function App() {
         {activeTab === 'carbon' && <CarbonDashboardPage />}
         {activeTab === 'auth' && <AuthPage setActiveTab={setActiveTab} />}
         {activeTab === 'account' && <AccountHubPage setActiveTab={setActiveTab} />}
+        {activeTab === 'purchases' && <AccountHubPage view="purchases" setActiveTab={setActiveTab} />}
+        {activeTab === 'sales' && <AccountHubPage view="sales" setActiveTab={setActiveTab} />}
         {activeTab === 'inquiries' && <AccountHubPage view="inquiries" setActiveTab={setActiveTab} />}
         {activeTab === 'profile' && <AccountProfilePage setActiveTab={setActiveTab} />}
         {activeTab === 'change-password' && <ChangePasswordPage setActiveTab={setActiveTab} />}
