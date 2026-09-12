@@ -79,7 +79,7 @@ export default function LandingPage({ setActiveTab }) {
           <div style={{ width: '40px', height: '40px', background: '#ECFDF5', color: '#10B981', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
             <Zap size={20} />
           </div>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '8px', color: '#0F172A' }}>Module 1: AI Material Grading</h3>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '8px', color: '#0F172A' }}>AI Material Grading</h3>
           <p style={{ fontSize: '0.9rem', color: '#64748B' }}>
             Computer vision photo scanner classifies packaging types (Cardboard, Euro-Pallets, HDPE, LDPE) and assesses quality (Grade A, B, C).
           </p>
@@ -89,7 +89,7 @@ export default function LandingPage({ setActiveTab }) {
           <div style={{ width: '40px', height: '40px', background: '#ECFDF5', color: '#10B981', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
             <Store size={20} />
           </div>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '8px', color: '#0F172A' }}>Module 2: PostGIS Geo-Marketplace</h3>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '8px', color: '#0F172A' }}>PostGIS Geo-Marketplace</h3>
           <p style={{ fontSize: '0.9rem', color: '#64748B' }}>
             Real-time proximity matchmaking connecting warehouses with local recyclers, manufacturers, and SMEs to eliminate long transport legs.
           </p>
@@ -99,7 +99,7 @@ export default function LandingPage({ setActiveTab }) {
           <div style={{ width: '40px', height: '40px', background: '#ECFDF5', color: '#10B981', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
             <Route size={20} />
           </div>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '8px', color: '#0F172A' }}>Module 3: Eco Backhaul Logistics</h3>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '8px', color: '#0F172A' }}>Eco Backhaul Logistics</h3>
           <p style={{ fontSize: '0.9rem', color: '#64748B' }}>
             Monetize empty return trips for freight carriers using Vehicle Routing Problem (VRP) algorithms to group multi-stop pickups.
           </p>
@@ -109,7 +109,7 @@ export default function LandingPage({ setActiveTab }) {
           <div style={{ width: '40px', height: '40px', background: '#ECFDF5', color: '#10B981', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
             <Leaf size={20} />
           </div>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '8px', color: '#0F172A' }}>Module 4: Embodied Carbon Engine</h3>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '8px', color: '#0F172A' }}>Embodied Carbon Engine</h3>
           <p style={{ fontSize: '0.9rem', color: '#64748B' }}>
             Mathematical engine based on EPA WARM & Ecoinvent LCA factors. Generates downloadable Scope 3 ESG certificates.
           </p>

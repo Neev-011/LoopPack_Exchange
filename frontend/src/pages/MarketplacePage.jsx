@@ -225,6 +225,11 @@ export default function MarketplacePage() {
           </h1>
           <p style={{ color: '#64748B', fontSize: '0.95rem' }}>
             Visual map & non-verbal graph metrics for available packaging scrap within your transit zone.
+          <h2 style={{ fontSize: '1.8rem', color: '#0F172A', fontWeight: '800' }}>
+            Geo-Proximity B2B Marketplace
+          </h2>
+          <p style={{ color: '#64748B', fontSize: '0.92rem' }}>
+            Showing available B2B packaging material lots within 25 km radius of your location.
           </p>
         </div>
 
