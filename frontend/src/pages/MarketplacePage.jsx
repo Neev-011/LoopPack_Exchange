@@ -84,6 +84,7 @@ export default function MarketplacePage() {
   const [claimedItem, setClaimedItem] = useState(null);
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
+  const [reserving, setReserving] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -126,12 +127,28 @@ export default function MarketplacePage() {
     });
   }, [dbListings, filterType, maxRadius]);
 
-  const handleConfirmReserve = (item) => {
-    setSelectedProduct(null);
-    setClaimedItem(item);
-    setTimeout(() => {
-      setClaimedItem(null);
-    }, 3500);
+  const handleConfirmReserve = async (item) => {
+    if (!currentUser) {
+      setClaimedItem({ title: 'Please sign in before completing an exchange.', location: 'B2B Account' });
+      return;
+    }
+    setReserving(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/exchanges/completed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ listing: item, username: currentUser?.username || null })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not complete this exchange.');
+      setSelectedProduct(null);
+      setClaimedItem(item);
+      setTimeout(() => setClaimedItem(null), 3500);
+    } catch (error) {
+      setClaimedItem({ title: error.message, location: 'Exchange' });
+    } finally {
+      setReserving(false);
+    }
   };
 
   const sendInquiry = async () => {
@@ -539,8 +556,9 @@ export default function MarketplacePage() {
                   className="btn-primary"
                   style={{ flex: 1, padding: '12px', justifyContent: 'center', fontSize: '1rem' }}
                   onClick={() => handleConfirmReserve(selectedProduct)}
+                  disabled={reserving}
                 >
-                  <Truck size={18} /> Reserve Lot & Dispatch Pickup
+                  <Truck size={18} /> {reserving ? 'Completing exchange...' : 'Reserve Lot & Dispatch Pickup'}
                 </button>
                 <button
                   className="btn-secondary"

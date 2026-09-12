@@ -72,6 +72,20 @@ async function main() {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )
   `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS completed_exchanges (
+      id VARCHAR(80) PRIMARY KEY,
+      listing_id VARCHAR(64) NOT NULL,
+      listing_title VARCHAR(255),
+      material_type VARCHAR(50) NOT NULL,
+      quantity NUMERIC NOT NULL,
+      unit VARCHAR(50),
+      grade VARCHAR(10),
+      distance_km NUMERIC DEFAULT 10,
+      buyer_username VARCHAR(100),
+      completed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )
+  `;
   await sql`ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE`;
 
   await sql`

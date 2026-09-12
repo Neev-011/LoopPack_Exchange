@@ -24,6 +24,7 @@ import {
   updateUserProfile,
   changeUserPassword
 } from './services/authService.js';
+import { getCompletedExchanges, recordCompletedExchange } from './services/exchangeService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -136,6 +137,26 @@ app.post('/api/v1/inquiries/:id/messages', async (req, res) => {
     res.status(201).json({ status: 'success', data: message });
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
+  }
+});
+
+app.get('/api/v1/exchanges/completed', async (req, res) => {
+  try {
+    res.json({ data: await getCompletedExchanges(req.query.buyerUsername) });
+  } catch (err) {
+    res.status(500).json({ error: `Unable to load completed exchanges: ${err.message}` });
+  }
+});
+
+app.post('/api/v1/exchanges/completed', async (req, res) => {
+  try {
+    const exchange = await recordCompletedExchange({
+      listing: req.body?.listing,
+      buyer: { username: req.body?.username }
+    });
+    res.status(201).json({ status: 'success', data: exchange });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

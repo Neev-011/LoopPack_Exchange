@@ -1,11 +1,11 @@
 /**
- * Generates an official ISO 14044 Audited Scope 3 ESG Compliance Certificate PDF
+ * Generates a LoopPack environmental impact report PDF
  * and initiates an automatic browser download.
  *
  * Designed to work with zero broken build dependencies:
  * - Uses window.jspdf if preloaded
  * - Dynamically loads CDN if missing
- * - Falls back to an audited, styled printable HTML/PDF window if offline
+ * - Falls back to a styled printable HTML/PDF window if offline
  */
 
 function getJsPDFConstructor() {
@@ -13,6 +13,19 @@ function getJsPDFConstructor() {
     return window.jspdf.jsPDF;
   }
   return null;
+}
+
+function loadImageData(imageUrl) {
+  if (!imageUrl) return Promise.resolve(null);
+  return fetch(imageUrl)
+    .then(response => response.blob())
+    .then(blob => new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    }))
+    .catch(() => null);
 }
 
 async function ensureJsPDF() {
@@ -45,36 +58,34 @@ async function ensureJsPDF() {
   });
 }
 
-function generatePrintableHTMLFallback({ streams, grandTotalNetCO2e, issuedTo, certId, issueDate, auditHash }) {
+function generatePrintableHTMLFallback({ streams, grandTotalNetCO2e, issuedTo, userName, logoUrl, certId, issueDate, auditHash }) {
   const printWindow = window.open('', '_blank', 'width=900,height=1100');
   if (!printWindow) {
-    alert('Please allow popups to download or print your ESG Compliance Certificate.');
-    return 'Scope3_Audited_ESG_Certificate_ISO14044.pdf';
+    alert('Please allow popups to download or print your LoopPack Impact Report.');
+    return 'LoopPack_Impact_Report.pdf';
   }
 
-  const sampleStreams = streams.length > 0 ? streams : [
-    { name: 'Corrugated Cardboard (12,500 Units)', virgin: '+11,750.0 kg', rep: '-1,500.0 kg', freight: '-0.02 kg', net: '10,249.98 kg' },
-    { name: 'Euro Wooden Pallets (3,200 Units)', virgin: '+89,600.0 kg', rep: '-4,000.0 kg', freight: '-0.26 kg', net: '85,599.74 kg' },
-    { name: 'HDPE Chemical Drums (1,400 Units)', virgin: '+11,970.0 kg', rep: '-1,134.0 kg', freight: '-0.03 kg', net: '10,835.97 kg' }
-  ];
+  const sampleStreams = streams;
 
   const totalNum = parseFloat(grandTotalNetCO2e) || 0;
   const tonsEquivalent = (totalNum / 1000).toFixed(2);
-  const treesApprox = Math.round(totalNum / 20);
 
   const html = `
     <!DOCTYPE html>
     <html>
       <head>
-        <title>ISO 14044 Scope 3 ESG Certificate - ${certId}</title>
+        <title>LoopPack Environmental Impact Report - ${certId}</title>
         <style>
           @page { size: A4 portrait; margin: 12mm; }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; color: #0F172A; margin: 0; padding: 20px; background: #fff; }
           .cert-container { border: 3px solid #0F5132; padding: 24px; border-radius: 8px; position: relative; max-width: 800px; margin: 0 auto; }
-          .cert-header { background: #0F5132; color: white; padding: 20px; text-align: center; border-radius: 6px; margin-bottom: 20px; }
+          .cert-header { background: #0F5132; color: white; padding: 20px; text-align: center; border-radius: 6px; margin-bottom: 20px; position: relative; }
+          .report-logo { position: absolute; top: 12px; right: 14px; width: 54px; height: 38px; object-fit: cover; object-position: center; border-radius: 5px; background: white; }
           .cert-header h1 { margin: 6px 0; font-size: 20px; letter-spacing: 0.5px; }
           .cert-header p { margin: 0; font-size: 11px; color: #A7F3D0; }
           .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; background: #F8FAFC; border: 1px solid #E2E8F0; padding: 14px; border-radius: 6px; font-size: 12px; margin-bottom: 20px; }
+          .meta-wide { grid-column: 1 / -1; min-width: 0; }
+          .meta-wide span { overflow-wrap: anywhere; }
           .meta-item strong { color: #64748B; font-size: 10px; text-transform: uppercase; display: block; margin-bottom: 2px; }
           .kpi-banner { background: #ECFDF5; border: 1px solid #86EFAC; padding: 18px; border-radius: 8px; text-align: center; margin-bottom: 20px; }
           .kpi-banner .headline { font-size: 12px; color: #047857; font-weight: 700; text-transform: uppercase; }
@@ -95,43 +106,45 @@ function generatePrintableHTMLFallback({ streams, grandTotalNetCO2e, issuedTo, c
       </head>
       <body>
         <div style="text-align: right; max-width: 800px; margin: 0 auto 10px;">
-          <button class="print-btn" onclick="window.print()">🖨️ Save as PDF / Print Certificate</button>
+          <button class="print-btn" onclick="window.print()">🖨️ Save as PDF / Print Report</button>
         </div>
         <div class="cert-container">
           <div class="cert-header">
+            <img class="report-logo" src="${logoUrl || ''}" alt="LoopPack Exchange logo">
             <p>LOOPPACK EXCHANGE • DECENTRALIZED CIRCULAR PACKAGING NETWORK</p>
-            <h1>AUDITED SCOPE 3 ESG COMPLIANCE CERTIFICATE</h1>
-            <p>In Conformance with ISO 14044:2006 Life Cycle Assessment & GHG Protocol Scope 3 Standard</p>
+            <h1>ENVIRONMENTAL IMPACT REPORT</h1>
+            <p>Estimated impact based on configured factors and transaction data</p>
           </div>
 
           <div class="meta-grid">
             <div class="meta-item">
-              <strong>Certificate ID</strong>
+              <strong>Report ID</strong>
               <span>${certId}</span>
             </div>
             <div class="meta-item">
-              <strong>Date of Audit</strong>
+              <strong>Report Date</strong>
               <span>${issueDate}</span>
             </div>
-            <div class="meta-item">
-              <strong>Issued To Entity</strong>
-              <span>${issuedTo}</span>
+            <div class="meta-item meta-wide">
+              <strong>Prepared For User</strong>
+              <span>${userName || issuedTo}</span>
             </div>
-            <div class="meta-item">
-              <strong>Audit Standard & Methodology</strong>
-              <span>EPA WARM v15 + Ecoinvent 3.8 LCA Model</span>
+            <div class="meta-item meta-wide">
+              <strong>Calculation Methodology</strong>
+              <span>Configured emission factors + completed transaction data. Equation: E_virgin − (E_reprocessing + E_transport)</span>
             </div>
           </div>
 
           <div class="kpi-banner">
-            <div class="headline">Total Certified Scope 3 Avoided Carbon Footprint</div>
+            <div class="headline">Estimated CO₂e Avoided</div>
             <div class="amount">${totalNum.toLocaleString()} kg CO₂e Avoided</div>
             <div class="equivalents">
-              Equivalent to ~${tonsEquivalent} Metric Tons CO₂e &nbsp;|&nbsp; ~${treesApprox} Mature Trees Absorbed/Yr
+              Equivalent to ~${tonsEquivalent} Metric Tons CO₂e
             </div>
           </div>
 
           <table>
+            <caption style="text-align:left; font-weight:700; color:#0F5132; padding:0 0 8px;">ISO 14044 Material Stream Avoidance Ledger for ${userName || issuedTo}</caption>
             <thead>
               <tr>
                 <th>Material Stream & Quantity</th>
@@ -152,7 +165,7 @@ function generatePrintableHTMLFallback({ streams, grandTotalNetCO2e, issuedTo, c
                 </tr>
               `).join('')}
               <tr style="background:#ECFDF5; font-weight:800; color:#0F5132">
-                <td colspan="4">TOTAL CERTIFIED AVOIDANCE</td>
+                <td colspan="4">TOTAL ESTIMATED IMPACT</td>
                 <td>${totalNum.toLocaleString()} kg CO₂e</td>
               </tr>
             </tbody>
@@ -160,21 +173,21 @@ function generatePrintableHTMLFallback({ streams, grandTotalNetCO2e, issuedTo, c
 
           <div class="audit-block">
             <div class="seal-box">
-              <strong>CRYPTOGRAPHIC SEAL</strong><br>
-              Status: VERIFIED & SEALED<br>
+              <strong>CALCULATION REFERENCE</strong><br>
+              Status: ESTIMATE<br>
               Ledger Hash: ${auditHash.slice(0, 20)}...
             </div>
             <div class="sig-box">
-              <strong>AUDIT ATTESTATION & SIGN-OFF</strong><br>
-              This certificate formally confirms that the carbon avoidance calculations detailed above have been verified in accordance with ISO 14044 LCA guidelines.
+              <strong>REPORT NOTE</strong><br>
+              This report presents an estimated environmental impact based on configured emission factors and transaction data. It is not a certified measurement.
               <div class="sig-line"></div>
-              <strong>Dr. Aris Thorne, Ph.D.</strong><br>
-              <span style="font-size:10px; color:#64748B">Head of LCA & Carbon Verification, LoopPack ESG Engine</span>
+              <strong>LoopPack Exchange</strong><br>
+              <span style="font-size:10px; color:#64748B">Environmental impact report generated from user exchange data</span>
             </div>
           </div>
 
           <div class="footer-note">
-            Generated dynamically by LoopPack Exchange Carbon Accounting Service. Valid for ESG disclosure and CSRD reporting.
+            Generated dynamically by LoopPack Exchange from the user's completed exchange data.
           </div>
         </div>
         <script>
@@ -188,13 +201,13 @@ function generatePrintableHTMLFallback({ streams, grandTotalNetCO2e, issuedTo, c
   printWindow.document.write(html);
   printWindow.document.close();
 
-  return 'Scope3_Audited_ESG_Certificate_ISO14044.pdf';
+  return 'LoopPack_Impact_Report.pdf';
 }
 
 /**
  * Builds the PDF using jsPDF instance if available
  */
-function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e = '18720.5', issuedTo = 'LoopPack Exchange B2B Industrial Network' }, certId, issueDate, auditHash) {
+function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e = '0.0', issuedTo = 'LoopPack Exchange B2B Industrial Network', userName = issuedTo, logoData }, certId, issueDate, auditHash) {
   const doc = new jsPDFConstructor({
     orientation: 'portrait',
     unit: 'mm',
@@ -214,6 +227,10 @@ function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e 
   doc.setDrawColor(180, 210, 195);
   doc.setLineWidth(0.4);
   doc.rect(margin + 2, margin + 2, contentWidth - 4, pageHeight - (margin * 2 + 4));
+
+  if (logoData) {
+    doc.addImage(logoData, 'PNG', pageWidth - margin - 31, margin + 5, 24, 16);
+  }
 
   // Corner flourishes
   doc.setFillColor(15, 81, 50);
@@ -237,52 +254,53 @@ function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e 
 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(15);
-  doc.text('AUDITED SCOPE 3 ESG COMPLIANCE CERTIFICATE', pageWidth / 2, margin + 17, { align: 'center' });
+  doc.text('ENVIRONMENTAL IMPACT REPORT', pageWidth / 2, margin + 17, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(226, 232, 240);
-  doc.text('In Conformance with ISO 14044:2006 Life Cycle Assessment & GHG Protocol Scope 3 Standard', pageWidth / 2, margin + 24, { align: 'center' });
+  doc.text('ISO 14044-based calculation framework using configured emission factors', pageWidth / 2, margin + 24, { align: 'center' });
 
   // 3. Metadata Header Info Box
   let currentY = margin + 37;
   doc.setFillColor(248, 250, 252);
-  doc.rect(margin + 4, currentY, contentWidth - 8, 20, 'F');
+  doc.rect(margin + 4, currentY, contentWidth - 8, 29, 'F');
   doc.setDrawColor(226, 232, 240);
   doc.setLineWidth(0.3);
-  doc.rect(margin + 4, currentY, contentWidth - 8, 20, 'D');
+  doc.rect(margin + 4, currentY, contentWidth - 8, 29, 'D');
 
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('CERTIFICATE ID:', margin + 8, currentY + 6);
+  doc.text('REPORT ID:', margin + 8, currentY + 6);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(15, 23, 42);
   doc.text(certId, margin + 35, currentY + 6);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('DATE OF AUDIT:', margin + 105, currentY + 6);
+  doc.text('REPORT DATE:', margin + 105, currentY + 6);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(15, 23, 42);
   doc.text(issueDate, margin + 132, currentY + 6);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('ISSUED TO ENTITY:', margin + 8, currentY + 14);
+  doc.text('PREPARED FOR USER:', margin + 8, currentY + 14);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(15, 23, 42);
-  doc.text(issuedTo, margin + 35, currentY + 14);
+  doc.text(doc.splitTextToSize(userName || issuedTo, contentWidth - 48), margin + 45, currentY + 14);
 
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(71, 85, 105);
-  doc.text('AUDIT METHOD:', margin + 105, currentY + 14);
+  doc.text('CALCULATION METHOD:', margin + 8, currentY + 22);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(15, 23, 42);
-  doc.text('EPA WARM v15 + Ecoinvent 3.8 LCA', margin + 132, currentY + 14);
+  const methodText = 'Configured emission factors + completed transaction data. Equation: E_virgin - (E_reprocessing + E_transport)';
+  doc.text(doc.splitTextToSize(methodText, contentWidth - 48), margin + 45, currentY + 22);
 
   // 4. Executive Impact Highlight Card
-  currentY += 25;
+  currentY += 34;
   doc.setFillColor(240, 253, 244);
   doc.setDrawColor(134, 239, 172);
   doc.setLineWidth(0.5);
@@ -291,7 +309,7 @@ function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9);
   doc.setTextColor(4, 120, 87);
-  doc.text('TOTAL CERTIFIED SCOPE 3 AVOIDED CARBON FOOTPRINT', pageWidth / 2, currentY + 8, { align: 'center' });
+  doc.text('ESTIMATED CO₂e AVOIDED', pageWidth / 2, currentY + 8, { align: 'center' });
 
   doc.setFontSize(21);
   doc.setTextColor(15, 81, 50);
@@ -302,16 +320,15 @@ function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e 
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(71, 85, 105);
-  const treesApprox = Math.round(totalNum / 20);
   const vehicleKmApprox = Math.round(totalNum / 0.12).toLocaleString();
-  doc.text(`Equivalent to ~${tonsEquivalent} Metric Tons CO2e  |  ~${treesApprox} Mature Trees Absorbed/Yr  |  ~${vehicleKmApprox} Passenger Car km Displaced`, pageWidth / 2, currentY + 26, { align: 'center' });
+  doc.text(`Equivalent to ~${tonsEquivalent} Metric Tons CO2e  |  ~${vehicleKmApprox} Passenger Car km Displaced`, pageWidth / 2, currentY + 26, { align: 'center' });
 
   // 5. Material Stream Breakdown Ledger (Table)
   currentY += 38;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(15, 23, 42);
-  doc.text('ISO 14044 Material Stream Avoidance Ledger', margin + 4, currentY);
+  doc.text(`ISO 14044 Material Stream Avoidance Ledger - ${userName || issuedTo}`, margin + 4, currentY);
 
   currentY += 4;
   const colX = [margin + 4, margin + 65, margin + 98, margin + 133, margin + 160];
@@ -330,11 +347,15 @@ function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e 
   doc.text('Net Avoided', colX[4] + 2, currentY + 5.5);
 
   currentY += rowHeight + 1;
-  const sampleStreams = streams.length > 0 ? streams : [
-    { name: 'Corrugated Cardboard (12,500 Units)', virgin: '+11,750.0 kg', rep: '-1,500.0 kg', freight: '-0.02 kg', net: '10,249.98 kg' },
-    { name: 'Euro Wooden Pallets (3,200 Units)', virgin: '+89,600.0 kg', rep: '-4,000.0 kg', freight: '-0.26 kg', net: '85,599.74 kg' },
-    { name: 'HDPE Chemical Drums (1,400 Units)', virgin: '+11,970.0 kg', rep: '-1,134.0 kg', freight: '-0.03 kg', net: '10,835.97 kg' }
-  ];
+  const sampleStreams = streams;
+
+  if (sampleStreams.length === 0) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('No completed exchanges recorded for this user.', colX[0] + 2, currentY + 5);
+    currentY += rowHeight;
+  }
 
   sampleStreams.forEach((stream, index) => {
     const isEven = index % 2 === 0;
@@ -374,7 +395,7 @@ function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(15, 81, 50);
-  doc.text('TOTAL CERTIFIED AVOIDANCE', colX[0] + 2, currentY + 5.5);
+  doc.text('TOTAL ESTIMATED IMPACT', colX[0] + 2, currentY + 5.5);
   doc.text(`${totalNum.toLocaleString()} kg CO2e`, colX[4] + 2, currentY + 5.5);
 
   // 6. Methodology Box
@@ -394,7 +415,7 @@ function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e 
   doc.setTextColor(71, 85, 105);
   doc.text('Net Avoided Emissions = E_virgin - (E_reprocessing + E_transport). Baseline assumes substitution of virgin packaging production', margin + 8, currentY + 11);
   doc.text('with inspected Grade A / Grade B closed-loop packaging. Freight calculations adhere to GLEC ton-km standard at 0.00016 kg CO2e/ton-km.', margin + 8, currentY + 16);
-  doc.text('Data Sources: US EPA Waste Reduction Model (WARM) v15, Ecoinvent 3.8, and verified LoopPack telemetry logs.', margin + 8, currentY + 21);
+  doc.text('Data Sources: configured emission factors and completed LoopPack exchange records.', margin + 8, currentY + 21);
 
   // 7. Audit Attestation Block
   currentY += 32;
@@ -408,7 +429,7 @@ function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6.8);
   doc.setTextColor(15, 81, 50);
-  doc.text('CRYPTOGRAPHIC SEAL', margin + 8, currentY + 6);
+  doc.text('CALCULATION REFERENCE', margin + 8, currentY + 6);
 
   doc.setFillColor(15, 81, 50);
   doc.rect(margin + 8, currentY + 9, 14, 14, 'F');
@@ -420,9 +441,9 @@ function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(5.5);
   doc.setTextColor(100, 116, 139);
-  doc.text('SHA-256 Ledger Audit', margin + 25, currentY + 13);
-  doc.text('Status: VERIFIED & SEALED', margin + 25, currentY + 17);
-  doc.text('Tamper-Resistant', margin + 25, currentY + 21);
+  doc.text('Calculation reference', margin + 25, currentY + 13);
+  doc.text('Status: ESTIMATE', margin + 25, currentY + 17);
+  doc.text('User exchange reference', margin + 25, currentY + 21);
 
   doc.setFont('courier', 'normal');
   doc.setFontSize(4.8);
@@ -438,13 +459,13 @@ function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7.5);
   doc.setTextColor(15, 23, 42);
-  doc.text('AUDIT ATTESTATION & SIGN-OFF', margin + 14 + sealWidth, currentY + 6);
+  doc.text('REPORT NOTE', margin + 14 + sealWidth, currentY + 6);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(71, 85, 105);
-  doc.text('This certificate formally confirms that the carbon avoidance calculations detailed above have been verified', margin + 14 + sealWidth, currentY + 11);
-  doc.text('in accordance with the ISO 14044 Life Cycle Assessment standard for Scope 3 emissions reduction.', margin + 14 + sealWidth, currentY + 15);
+  doc.text('This report presents an estimated environmental impact based on configured factors and transaction data.', margin + 14 + sealWidth, currentY + 11);
+  doc.text('using an ISO 14044-based calculation framework for estimated impact.', margin + 14 + sealWidth, currentY + 15);
 
   doc.setDrawColor(15, 81, 50);
   doc.setLineWidth(0.4);
@@ -453,31 +474,33 @@ function buildJsPDFDocument(jsPDFConstructor, { streams = [], grandTotalNetCO2e 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(7);
   doc.setTextColor(15, 81, 50);
-  doc.text('Dr. Aris Thorne, Ph.D.', margin + 14 + sealWidth, currentY + 29.5);
+  doc.text('LoopPack Exchange', margin + 14 + sealWidth, currentY + 29.5);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6);
   doc.setTextColor(100, 116, 139);
-  doc.text('Head of LCA & Carbon Verification, LoopPack ESG Engine', margin + 14 + sealWidth, currentY + 32.5);
+  doc.text('Environmental impact report generated from user exchange data', margin + 14 + sealWidth, currentY + 32.5);
 
   // Footer
   doc.setFont('helvetica', 'italic');
   doc.setFontSize(6);
   doc.setTextColor(148, 163, 184);
-  doc.text('Generated dynamically by LoopPack Exchange Carbon Accounting Service. Valid for ESG disclosure and CSRD reporting.', pageWidth / 2, pageHeight - margin - 3, { align: 'center' });
+  doc.text('Generated dynamically by LoopPack Exchange from the user\'s completed exchange data.', pageWidth / 2, pageHeight - margin - 3, { align: 'center' });
 
-  const filename = 'Scope3_Audited_ESG_Certificate_ISO14044.pdf';
+  const filename = 'LoopPack_Impact_Report.pdf';
   doc.save(filename);
   return filename;
 }
 
 /**
- * Main certificate generation entry point
+ * Main impact report generation entry point
  */
 export function generateESGCertificatePDF({
   streams = [],
-  grandTotalNetCO2e = '18720.5',
-  issuedTo = 'LoopPack Exchange B2B Industrial Network'
+  grandTotalNetCO2e = '0.0',
+  issuedTo = 'LoopPack Exchange B2B Industrial Network',
+  userName = issuedTo,
+  logoUrl = null
 } = {}) {
   const certId = 'LPX-ISO14044-' + Math.floor(100000 + Math.random() * 900000);
   const issueDate = new Date().toLocaleDateString('en-US', {
@@ -490,19 +513,24 @@ export function generateESGCertificatePDF({
   // 1. Check if jsPDF is already loaded in window
   const jsPDFConstructor = getJsPDFConstructor();
   if (jsPDFConstructor) {
-    return buildJsPDFDocument(jsPDFConstructor, { streams, grandTotalNetCO2e, issuedTo }, certId, issueDate, auditHash);
+    loadImageData(logoUrl).then(logoData => {
+      buildJsPDFDocument(jsPDFConstructor, { streams, grandTotalNetCO2e, issuedTo, userName, logoData }, certId, issueDate, auditHash);
+    });
+    return 'LoopPack_Impact_Report.pdf';
   }
 
   // 2. Try async load from CDN or fallback to printable HTML window
   ensureJsPDF().then((loadedJsPDF) => {
     if (loadedJsPDF) {
-      buildJsPDFDocument(loadedJsPDF, { streams, grandTotalNetCO2e, issuedTo }, certId, issueDate, auditHash);
+      loadImageData(logoUrl).then(logoData => {
+        buildJsPDFDocument(loadedJsPDF, { streams, grandTotalNetCO2e, issuedTo, userName, logoData }, certId, issueDate, auditHash);
+      });
     } else {
-      generatePrintableHTMLFallback({ streams, grandTotalNetCO2e, issuedTo, certId, issueDate, auditHash });
+      generatePrintableHTMLFallback({ streams, grandTotalNetCO2e, issuedTo, userName, logoUrl, certId, issueDate, auditHash });
     }
   }).catch(() => {
-    generatePrintableHTMLFallback({ streams, grandTotalNetCO2e, issuedTo, certId, issueDate, auditHash });
+    generatePrintableHTMLFallback({ streams, grandTotalNetCO2e, issuedTo, userName, logoUrl, certId, issueDate, auditHash });
   });
 
-  return 'Scope3_Audited_ESG_Certificate_ISO14044.pdf';
+  return 'LoopPack_Impact_Report.pdf';
 }
