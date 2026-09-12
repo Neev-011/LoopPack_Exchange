@@ -26,8 +26,12 @@ function readLocalUsers() {
 }
 
 function saveLocalUsers(users) {
-  fs.mkdirSync(path.dirname(USERS_FILE), { recursive: true });
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+  try {
+    fs.mkdirSync(path.dirname(USERS_FILE), { recursive: true });
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[AuthService] Local user save failed:', err.message);
+  }
 }
 
 function fromRow(row) {
@@ -44,31 +48,48 @@ function sanitizeUser(user) {
   return safeUser;
 }
 
+function validatePassword(password) {
+  if (typeof password !== 'string' || password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z\d\s]/.test(password)) {
+    throw new Error('Password must be at least 8 characters and include at least 1 alphabet, 1 number, and 1 symbol.');
+  }
+}
+
 async function readUsers() {
   const client = getNeonClient();
   if (client) {
-    const rows = await client`SELECT * FROM users ORDER BY created_at ASC`;
-    return rows.map(fromRow);
+    try {
+      const rows = await client`SELECT * FROM users ORDER BY created_at ASC`;
+      if (Array.isArray(rows) && rows.length > 0) {
+        return rows.map(fromRow);
+      }
+    } catch (err) {
+      console.warn('[Neon DB Users Read Error, using local fallback]:', err.message);
+    }
   }
   return readLocalUsers();
 }
 
 async function saveUser(user) {
-  const client = getNeonClient();
-  if (client) {
-    await client`
-      INSERT INTO users (id, username, company_name, email, password, role, role_label, industry, security_question, security_answer, created_at)
-      VALUES (${user.id}, ${user.username}, ${user.companyName}, ${user.email}, ${user.password}, ${user.role}, ${user.roleLabel}, ${user.industry}, ${user.securityQuestion || ''}, ${user.securityAnswer || ''}, ${user.createdAt || new Date().toISOString()})
-      ON CONFLICT (id) DO UPDATE SET company_name=EXCLUDED.company_name, email=EXCLUDED.email, password=EXCLUDED.password,
-        role=EXCLUDED.role, role_label=EXCLUDED.role_label, industry=EXCLUDED.industry,
-        security_question=EXCLUDED.security_question, security_answer=EXCLUDED.security_answer
-    `;
-    return;
-  }
+  // Always save to local JSON file first so users are guaranteed persisted
   const users = readLocalUsers();
   const index = users.findIndex(item => item.id === user.id);
   if (index === -1) users.push(user); else users[index] = user;
   saveLocalUsers(users);
+
+  const client = getNeonClient();
+  if (client) {
+    try {
+      await client`
+        INSERT INTO users (id, username, company_name, email, password, role, role_label, industry, security_question, security_answer, created_at)
+        VALUES (${user.id}, ${user.username}, ${user.companyName}, ${user.email}, ${user.password}, ${user.role}, ${user.roleLabel}, ${user.industry}, ${user.securityQuestion || ''}, ${user.securityAnswer || ''}, ${user.createdAt || new Date().toISOString()})
+        ON CONFLICT (id) DO UPDATE SET company_name=EXCLUDED.company_name, email=EXCLUDED.email, password=EXCLUDED.password,
+          role=EXCLUDED.role, role_label=EXCLUDED.role_label, industry=EXCLUDED.industry,
+          security_question=EXCLUDED.security_question, security_answer=EXCLUDED.security_answer
+      `;
+    } catch (err) {
+      console.warn('[Neon DB User Save Error]:', err.message);
+    }
+  }
 }
 
 export async function getAllDemoUsers() {
@@ -77,7 +98,8 @@ export async function getAllDemoUsers() {
 
 export async function checkUsername(username) {
   if (!username) return { exists: false };
-  const found = (await readUsers()).find(user => user.username.toLowerCase() === username.trim().toLowerCase());
+  const needle = username.trim().toLowerCase();
+  const found = (await readUsers()).find(user => user.username.toLowerCase() === needle || user.email.toLowerCase() === needle);
   return found ? { exists: true, userPreview: { username: found.username, companyName: found.companyName, role: found.role, roleLabel: found.roleLabel, securityQuestion: found.securityQuestion } } : { exists: false };
 }
 
@@ -92,6 +114,7 @@ export async function authenticateUser({ usernameOrEmail, password }) {
 
 export async function registerUser({ username, companyName, email, password, role = 'supplier', industry = 'Manufacturing & Logistics', securityQuestion = "What is your company's founding hub city?", securityAnswer = '' }) {
   if (!username || !companyName || !email || !password) throw new Error('Username, Company Name, Email, and Password are required.');
+  validatePassword(password);
   const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '_');
   const cleanEmail = email.trim().toLowerCase();
   const users = await readUsers();
@@ -107,6 +130,7 @@ export async function registerUser({ username, companyName, email, password, rol
 
 export async function resetPassword({ usernameOrEmail, securityAnswer, newPassword }) {
   if (!usernameOrEmail || !newPassword) throw new Error('Username/email and new password are required.');
+  validatePassword(newPassword);
   const needle = usernameOrEmail.trim().toLowerCase();
   const user = (await readUsers()).find(item => item.username.toLowerCase() === needle || item.email.toLowerCase() === needle);
   if (!user) throw new Error('No B2B account found with this username or corporate email.');
@@ -139,7 +163,7 @@ export async function updateUserProfile({ userId, companyName, email, industry }
 
 export async function changeUserPassword({ userId, currentPassword, newPassword }) {
   if (!userId || !currentPassword || !newPassword) throw new Error('Current password and new password are required.');
-  if (newPassword.length < 8) throw new Error('New password must be at least 8 characters.');
+  validatePassword(newPassword);
   const user = (await readUsers()).find(item => item.id === userId);
   if (!user) throw new Error('Account not found.');
   if (user.password !== currentPassword) throw new Error('Current password is incorrect.');

@@ -25,7 +25,7 @@ export function AuthProvider({ children }) {
       .then(res => {
         if (res.data) setDemoUsers(res.data);
       })
-      .catch(err => console.error('[AuthContext] Error loading demo users:', err));
+      .catch(err => console.warn('[AuthContext] Error loading demo users:', err));
   }, []);
 
   const persistUser = (user) => {
@@ -46,7 +46,7 @@ export function AuthProvider({ children }) {
       });
       return await res.json();
     } catch (err) {
-      console.error('[AuthContext] checkUsername failed:', err);
+      console.warn('[AuthContext] checkUsername failed:', err.message);
       return { exists: false, error: err.message };
     }
   };
@@ -63,6 +63,11 @@ export function AuthProvider({ children }) {
       if (!res.ok) throw new Error(data.error || 'Login failed');
       persistUser(data.user);
       return data.user;
+    } catch (err) {
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        throw new Error('Backend server is offline or unreachable at http://localhost:5001. Please ensure the backend server is running.');
+      }
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -80,6 +85,11 @@ export function AuthProvider({ children }) {
       if (!res.ok) throw new Error(data.error || 'Registration failed');
       persistUser(data.user);
       return data.user;
+    } catch (err) {
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        throw new Error('Backend server is offline or unreachable at http://localhost:5001. Please ensure the backend server is running.');
+      }
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -97,6 +107,11 @@ export function AuthProvider({ children }) {
       if (!res.ok) throw new Error(data.error || 'Password reset failed');
       if (data.user) persistUser(data.user);
       return data;
+    } catch (err) {
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        throw new Error('Backend server is offline or unreachable at http://localhost:5001.');
+      }
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -113,6 +128,11 @@ export function AuthProvider({ children }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Username recovery failed');
       return data.data;
+    } catch (err) {
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        throw new Error('Backend server is offline or unreachable at http://localhost:5001.');
+      }
+      throw err;
     } finally {
       setLoading(false);
     }

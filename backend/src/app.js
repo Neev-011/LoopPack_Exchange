@@ -257,7 +257,9 @@ app.get('/api/v1/orders', async (req, res) => {
     if (!username) return res.status(401).json({ error: 'A signed-in user is required.' });
     const client = getNeonClient();
     if (!client) return res.json({ data: [] });
-    const rows = await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`;
+    const rows = req.query.role === 'buyer'
+      ? await client`SELECT * FROM sales_orders WHERE buyer_username = ${username} ORDER BY created_at DESC`
+      : await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`;
     res.json({ data: rows.map(row => ({
       id: row.id, listingId: row.listing_id, listingTitle: row.listing_title,
       sellerUsername: row.seller_username, buyerId: row.buyer_id, buyerUsername: row.buyer_username,

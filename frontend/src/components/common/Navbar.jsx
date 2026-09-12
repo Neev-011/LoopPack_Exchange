@@ -12,7 +12,8 @@ import {
   LogOut,
   ChevronDown,
   Sparkles,
-  PackageCheck
+  PackageCheck,
+  ShoppingBag
 } from 'lucide-react';
 import Logo from './Logo';
 import { useAuth } from '../../context/AuthContext';
@@ -198,6 +199,42 @@ export default function Navbar({ activeTab, setActiveTab }) {
                     <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Manage lots & price edits</div>
                   </div>
                 </button>
+
+                {currentUser && (
+                  <button
+                    onClick={() => handleNavClick('purchases')}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: '8px', border: 'none',
+                      background: activeTab === 'purchases' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+                      color: activeTab === 'purchases' ? '#34D399' : '#E2E8F0', fontSize: '0.88rem',
+                      fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', textAlign: 'left'
+                    }}
+                  >
+                    <ShoppingBag size={18} color="#34D399" />
+                    <div>
+                      <div>My Purchases</div>
+                      <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Orders & delivery details</div>
+                    </div>
+                  </button>
+                )}
+
+                {currentUser && (
+                  <button
+                    onClick={() => handleNavClick('sales')}
+                    style={{
+                      width: '100%', padding: '10px 12px', borderRadius: '8px', border: 'none',
+                      background: activeTab === 'sales' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
+                      color: activeTab === 'sales' ? '#34D399' : '#E2E8F0', fontSize: '0.88rem',
+                      fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', textAlign: 'left'
+                    }}
+                  >
+                    <ShoppingBag size={18} color="#F59E0B" />
+                    <div>
+                      <div>Sales History</div>
+                      <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Orders and buyer details</div>
+                    </div>
+                  </button>
+                )}
 
                 <button
                   onClick={() => handleNavClick('inquiries')}

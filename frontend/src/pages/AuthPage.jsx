@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Logo from '../components/common/Logo';
+import { isValidPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
+import PasswordRequirements from '../components/common/PasswordRequirements';
 
 export default function AuthPage({ setActiveTab }) {
   const { 
@@ -87,6 +89,10 @@ export default function AuthPage({ setActiveTab }) {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+    if (!isValidPassword(regPassword)) {
+      setErrorMsg(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     setLoading(true);
 
     try {
@@ -115,6 +121,10 @@ export default function AuthPage({ setActiveTab }) {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+    if (!isValidPassword(newPassword)) {
+      setErrorMsg(PASSWORD_POLICY_MESSAGE);
+      return;
+    }
     setLoading(true);
 
     try {
@@ -396,7 +406,7 @@ export default function AuthPage({ setActiveTab }) {
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <HelpCircle size={16} />
-                    <span>Username <strong>@{usernameOrEmail}</strong> is not registered yet.</span>
+                    <span>Username or email <strong>{usernameOrEmail}</strong> is not registered yet.</span>
                   </div>
                   <button
                     type="button"
@@ -592,6 +602,8 @@ export default function AuthPage({ setActiveTab }) {
                   <input
                     type="password"
                     required
+                    minLength={8}
+                    pattern="(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z\d\s]).{8,}"
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
                     placeholder="Create a strong password"
@@ -605,6 +617,7 @@ export default function AuthPage({ setActiveTab }) {
                     }}
                   />
                 </div>
+                <PasswordRequirements password={regPassword} />
               </div>
             </div>
 
@@ -701,6 +714,8 @@ export default function AuthPage({ setActiveTab }) {
                 <input
                   type="password"
                   required
+                  minLength={8}
+                  pattern="(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z\d\s]).{8,}"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Enter your new password"
@@ -714,6 +729,7 @@ export default function AuthPage({ setActiveTab }) {
                   }}
                 />
               </div>
+              <PasswordRequirements password={newPassword} />
             </div>
 
             <div style={{ display: 'flex', gap: '12px' }}>
