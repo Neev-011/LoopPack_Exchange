@@ -139,6 +139,83 @@ app.post('/api/v1/inquiries/:id/messages', async (req, res) => {
   }
 });
 
+app.post('/api/v1/orders', async (req, res) => {
+  try {
+    const { listingId, buyer, quantity, destination, paymentMethod } = req.body || {};
+    if (!buyer?.id || !buyer?.username || !buyer?.companyName || !buyer?.email) {
+      return res.status(401).json({ error: 'Sign in with a complete buyer profile before reserving material.' });
+    }
+    if (!destination?.trim() || !paymentMethod?.trim()) {
+      return res.status(400).json({ error: 'Destination and payment method are required.' });
+    }
+    const client = getNeonClient();
+    if (!client) return res.status(503).json({ error: 'Database is unavailable. The order was not created.' });
+    const rows = await client`SELECT * FROM listings WHERE id = ${String(listingId)} LIMIT 1`;
+    if (!rows.length) return res.status(404).json({ error: 'This material is no longer available.' });
+    const listing = rows[0];
+    if (listing.created_by === buyer.username) return res.status(400).json({ error: 'You cannot purchase your own listing.' });
+    const requestedQuantity = Number(quantity);
+    if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0 || requestedQuantity > Number(listing.quantity)) {
+      return res.status(400).json({ error: `Quantity must be between 1 and ${listing.quantity}.` });
+    }
+    const order = {
+      id: `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      listingId: String(listing.id),
+      listingTitle: listing.title,
+      sellerUsername: listing.created_by,
+      buyerId: buyer.id,
+      buyerUsername: buyer.username,
+      buyerCompany: buyer.companyName,
+      buyerEmail: buyer.email,
+      quantity: requestedQuantity,
+      unit: listing.unit,
+      unitPrice: Number(listing.price) || 0,
+      totalPrice: (Number(listing.price) || 0) * requestedQuantity,
+      destination: destination.trim(),
+      paymentMethod: paymentMethod.trim(),
+      status: 'completed',
+      listingSnapshot: listing
+    };
+    await client`
+      INSERT INTO sales_orders (
+        id, listing_id, listing_title, seller_username, buyer_id, buyer_username, buyer_company,
+        buyer_email, quantity, unit, unit_price, total_price, destination, payment_method,
+        status, listing_snapshot
+      ) VALUES (
+        ${order.id}, ${order.listingId}, ${order.listingTitle}, ${order.sellerUsername}, ${order.buyerId},
+        ${order.buyerUsername}, ${order.buyerCompany}, ${order.buyerEmail}, ${order.quantity}, ${order.unit},
+        ${order.unitPrice}, ${order.totalPrice}, ${order.destination}, ${order.paymentMethod},
+        ${order.status}, ${JSON.stringify(order.listingSnapshot)}
+      )
+    `;
+    await client`DELETE FROM listings WHERE id = ${order.listingId}`;
+    res.status(201).json({ status: 'success', data: order });
+  } catch (err) {
+    console.error('[Orders] checkout failed:', err.message);
+    res.status(500).json({ error: 'Could not complete this reservation. Please try again.' });
+  }
+});
+
+app.get('/api/v1/orders', async (req, res) => {
+  try {
+    const username = req.query.username;
+    if (!username) return res.status(401).json({ error: 'A signed-in user is required.' });
+    const client = getNeonClient();
+    if (!client) return res.json({ data: [] });
+    const rows = await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`;
+    res.json({ data: rows.map(row => ({
+      id: row.id, listingId: row.listing_id, listingTitle: row.listing_title,
+      sellerUsername: row.seller_username, buyerId: row.buyer_id, buyerUsername: row.buyer_username,
+      buyerCompany: row.buyer_company, buyerEmail: row.buyer_email, quantity: Number(row.quantity),
+      unit: row.unit, unitPrice: Number(row.unit_price), totalPrice: Number(row.total_price),
+      destination: row.destination, paymentMethod: row.payment_method, status: row.status,
+      listingSnapshot: row.listing_snapshot, createdAt: row.created_at
+    })) });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not load completed sales.' });
+  }
+});
+
 // Helper to read DB from disk
 function readDatabase() {
   try {

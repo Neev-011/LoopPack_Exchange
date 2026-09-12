@@ -72,6 +72,28 @@ async function main() {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )
   `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS sales_orders (
+      id VARCHAR(80) PRIMARY KEY,
+      listing_id VARCHAR(64) NOT NULL,
+      listing_title VARCHAR(255) NOT NULL,
+      seller_username VARCHAR(100) NOT NULL,
+      buyer_id VARCHAR(64) NOT NULL,
+      buyer_username VARCHAR(100) NOT NULL,
+      buyer_company VARCHAR(255) NOT NULL,
+      buyer_email VARCHAR(255),
+      quantity NUMERIC NOT NULL,
+      unit VARCHAR(50),
+      unit_price NUMERIC DEFAULT 0,
+      total_price NUMERIC DEFAULT 0,
+      destination TEXT NOT NULL,
+      payment_method VARCHAR(80) NOT NULL,
+      status VARCHAR(40) DEFAULT 'completed',
+      listing_snapshot JSONB NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )
+  `;
   await sql`ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE`;
 
   await sql`

@@ -20,6 +20,7 @@ export default function AccountHubPage({ view = 'materials' }) {
   const { currentUser } = useAuth();
   const [inquiries, setInquiries] = useState([]);
   const [listings, setListings] = useState([]);
+  const [completedSales, setCompletedSales] = useState([]);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState('');
@@ -38,6 +39,10 @@ export default function AccountHubPage({ view = 'materials' }) {
       const listingResponse = await fetch(`${API_BASE_URL}/listings?owner=${encodeURIComponent(currentUser.username)}`);
       const listingData = await listingResponse.json();
       setListings(listingData.data || []);
+      const salesResponse = await fetch(`${API_BASE_URL}/orders?username=${encodeURIComponent(currentUser.username)}`);
+      const salesData = await salesResponse.json();
+      if (!salesResponse.ok) throw new Error(salesData.error || 'Could not load completed sales.');
+      setCompletedSales(salesData.data || []);
     }
   };
 
@@ -147,6 +152,7 @@ export default function AccountHubPage({ view = 'materials' }) {
       </p>
       {error && <div style={{ background: '#FEF2F2', color: '#991B1B', padding: 12, borderRadius: 8, marginBottom: 16 }}>{error}</div>}
       {view === 'materials' && isSeller && (
+        <>
         <section style={{ background: 'white', padding: 24, borderRadius: 12, marginBottom: 20, border: '1px solid #E2E8F0' }}>
           <h3>My posted materials</h3>
           {listings.length === 0 && <p style={{ color: '#64748B' }}>No listings are attributed to this account yet. New posts will be linked to your account.</p>}
@@ -160,6 +166,26 @@ export default function AccountHubPage({ view = 'materials' }) {
             </div>
           ))}
         </section>
+        <section style={{ background: 'white', padding: 24, borderRadius: 12, marginBottom: 20, border: '1px solid #A7F3D0' }}>
+          <h3>Completed sales</h3>
+          {completedSales.length === 0 && <p style={{ color: '#64748B' }}>No completed sales yet.</p>}
+          {completedSales.map(order => (
+            <div key={order.id} style={{ border: '1px solid #D1FAE5', background: '#F0FDF4', borderRadius: 10, padding: 16, marginTop: 12 }}>
+              <strong>{order.listingTitle}</strong>
+              <p style={{ margin: '8px 0', color: '#334155' }}>
+                Sold to <strong>{order.buyerCompany}</strong> (@{order.buyerUsername}) · {order.quantity} {order.unit}
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, color: '#475569', fontSize: 13 }}>
+                <div><strong>Buyer email:</strong> {order.buyerEmail}</div>
+                <div><strong>Total:</strong> ₹{order.totalPrice.toLocaleString()}</div>
+                <div><strong>Payment:</strong> {order.paymentMethod}</div>
+                <div><strong>Destination:</strong> {order.destination}</div>
+                <div><strong>Completed:</strong> {new Date(order.createdAt).toLocaleString()}</div>
+              </div>
+            </div>
+          ))}
+        </section>
+        </>
       )}
 
       <section style={{ background: 'white', padding: 24, borderRadius: 12, border: '1px solid #E2E8F0' }}>
