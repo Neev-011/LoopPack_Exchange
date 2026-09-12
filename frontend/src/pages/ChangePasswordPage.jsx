@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ArrowLeft, CheckCircle, KeyRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { isValidPassword, PASSWORD_POLICY_MESSAGE } from '../utils/passwordPolicy';
+import PasswordRequirements from '../components/common/PasswordRequirements';
 
 export default function ChangePasswordPage({ setActiveTab }) {
   const { currentUser, changePassword } = useAuth();
@@ -18,6 +20,10 @@ export default function ChangePasswordPage({ setActiveTab }) {
     setError('');
     if (passwords.newPassword !== passwords.confirmation) {
       setError('New password and confirmation do not match.');
+      return;
+    }
+    if (!isValidPassword(passwords.newPassword)) {
+      setError(PASSWORD_POLICY_MESSAGE);
       return;
     }
     try {
@@ -43,7 +49,8 @@ export default function ChangePasswordPage({ setActiveTab }) {
         {error && <div style={feedbackStyle('#FEF2F2', '#991B1B')}>{error}</div>}
         <form onSubmit={submit}>
           <Field label="Current password" type="password" value={passwords.currentPassword} onChange={value => setPasswords({ ...passwords, currentPassword: value })} />
-          <Field label="New password" type="password" value={passwords.newPassword} onChange={value => setPasswords({ ...passwords, newPassword: value })} />
+          <Field label="New password" type="password" validatePassword value={passwords.newPassword} onChange={value => setPasswords({ ...passwords, newPassword: value })} />
+          <PasswordRequirements password={passwords.newPassword} />
           <Field label="Confirm new password" type="password" value={passwords.confirmation} onChange={value => setPasswords({ ...passwords, confirmation: value })} />
           <button className="btn-primary" type="submit">Update password</button>
         </form>
@@ -52,8 +59,8 @@ export default function ChangePasswordPage({ setActiveTab }) {
   );
 }
 
-function Field({ label, type, value, onChange }) {
-  return <label style={{ display: 'block', color: '#475569', fontSize: 13, marginBottom: 14 }}>{label}<input required minLength={type === 'password' ? 8 : undefined} type={type} value={value} onChange={event => onChange(event.target.value)} style={inputStyle} /></label>;
+function Field({ label, type, validatePassword = false, value, onChange }) {
+  return <label style={{ display: 'block', color: '#475569', fontSize: 13, marginBottom: 14 }}>{label}<input required minLength={validatePassword ? 8 : undefined} pattern={validatePassword ? '(?=.*[A-Za-z])(?=.*\\d)(?=.*[^A-Za-z\\d\\s]).{8,}' : undefined} type={type} value={value} onChange={event => onChange(event.target.value)} style={inputStyle} /></label>;
 }
 
 const panelStyle = { background: 'white', padding: 24, borderRadius: 12, border: '1px solid #E2E8F0' };
