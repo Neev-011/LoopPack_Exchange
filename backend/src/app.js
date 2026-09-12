@@ -83,8 +83,8 @@ app.patch('/api/v1/inquiries/:id', (req, res) => {
   }
 });
 
-app.patch('/api/v1/listings/:id', (req, res) => {
-  const listings = readDatabase();
+app.patch('/api/v1/listings/:id', async (req, res) => {
+  const listings = await getListings();
   const index = listings.findIndex(item => String(item.id) === String(req.params.id));
   if (index === -1) return res.status(404).json({ error: 'Listing not found.' });
   if (!req.body?.username || listings[index].createdBy !== req.body.username) {
@@ -98,8 +98,12 @@ app.patch('/api/v1/listings/:id', (req, res) => {
   });
   listings[index].isFree = Number(listings[index].price) === 0;
   listings[index].updatedAt = new Date().toISOString();
-  saveDatabase(listings);
-  res.json({ status: 'success', data: listings[index] });
+  try {
+    await saveDatabase([listings[index]]);
+    res.json({ status: 'success', data: listings[index] });
+  } catch (err) {
+    res.status(500).json({ error: `Unable to save listing: ${err.message}` });
+  }
 });
 
 app.get('/api/v1/inquiries/:id/messages', (req, res) => {
@@ -134,61 +138,71 @@ function readDatabase() {
   }
 }
 
-// Helper to save DB to disk and sync with Neon PostgreSQL
-function saveDatabase(listings) {
+async function getListings() {
+  const client = getNeonClient();
+  if (!client) return readDatabase();
+
+  const rows = await client`SELECT * FROM listings ORDER BY created_at DESC`;
+  return rows.map(row => ({
+    id: row.id,
+    title: row.title,
+    materialType: row.material_type,
+    quantity: Number(row.quantity),
+    unit: row.unit,
+    grade: row.grade,
+    location: row.location,
+    lat: Number(row.lat),
+    lon: Number(row.lon),
+    price: Number(row.price),
+    isFree: row.is_free,
+    description: row.description,
+    image: row.image,
+    createdBy: row.created_by,
+    companyName: row.company_name,
+    ownerRole: row.owner_role,
+    createdAt: row.created_at
+  }));
+}
+
+// Neon is the primary store when configured. JSON is only a local fallback.
+async function saveDatabase(listings) {
+  const client = getNeonClient();
+  if (client) {
+    for (const l of listings) {
+      await client`
+        INSERT INTO listings (
+          id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_at
+        ) VALUES (
+          ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade || 'A'},
+          ${l.location || ''}, ${l.lat || 19.08}, ${l.lon || 72.88}, ${l.price || 0}, ${l.isFree || false}, ${l.description || ''},
+          ${l.image || ''}, ${l.createdBy || 'anonymous'}, ${l.companyName || 'B2B Partner'}, ${l.ownerRole || 'Supplier'},
+          ${l.createdAt || new Date().toISOString()}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title, material_type = EXCLUDED.material_type, quantity = EXCLUDED.quantity,
+          unit = EXCLUDED.unit, grade = EXCLUDED.grade, location = EXCLUDED.location, lat = EXCLUDED.lat,
+          lon = EXCLUDED.lon, price = EXCLUDED.price, is_free = EXCLUDED.is_free, description = EXCLUDED.description,
+          image = EXCLUDED.image, created_by = EXCLUDED.created_by, company_name = EXCLUDED.company_name,
+          owner_role = EXCLUDED.owner_role
+      `;
+    }
+    return;
+  }
+
   try {
     const dir = path.dirname(DB_FILE);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(listings, null, 2), 'utf8');
-
-    // Sync listings into Neon PostgreSQL database if connected
-    const client = getNeonClient();
-    if (client) {
-      (async () => {
-        try {
-          for (const l of listings) {
-            await client`
-              INSERT INTO listings (
-                id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_at
-              ) VALUES (
-                ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade || 'A'},
-                ${l.location || ''}, ${l.lat || 19.08}, ${l.lon || 72.88}, ${l.price || 0}, ${l.isFree || false}, ${l.description || ''},
-                ${l.image || ''}, ${l.createdBy || 'anonymous'}, ${l.companyName || 'B2B Partner'}, ${l.ownerRole || 'Supplier'},
-                ${l.createdAt || new Date().toISOString()}
-              )
-              ON CONFLICT (id) DO UPDATE SET
-                title = EXCLUDED.title,
-                material_type = EXCLUDED.material_type,
-                quantity = EXCLUDED.quantity,
-                unit = EXCLUDED.unit,
-                grade = EXCLUDED.grade,
-                location = EXCLUDED.location,
-                lat = EXCLUDED.lat,
-                lon = EXCLUDED.lon,
-                price = EXCLUDED.price,
-                is_free = EXCLUDED.is_free,
-                description = EXCLUDED.description,
-                image = EXCLUDED.image,
-                created_by = EXCLUDED.created_by,
-                company_name = EXCLUDED.company_name,
-                owner_role = EXCLUDED.owner_role
-            `;
-          }
-        } catch (dbErr) {
-          console.error('[Neon DB Sync Error]:', dbErr.message);
-        }
-      })();
-    }
   } catch (err) {
-    console.error('Error saving DB file:', err);
+    throw new Error(`Error saving local database: ${err.message}`);
   }
 }
 
 // 1. Health check
-app.get('/api/v1/health', (req, res) => {
-  const listings = readDatabase();
+app.get('/api/v1/health', async (req, res) => {
+  const listings = await getListings();
   res.json({
     status: 'OK',
     system: 'LoopPack Exchange B2B API Gateway',
@@ -268,8 +282,8 @@ app.post('/api/v1/auth/change-password', (req, res) => {
 });
 
 // 3. Fetch Listings (Spatial / Filtered / Multi-User Owned)
-app.get('/api/v1/listings', (req, res) => {
-  const listings = readDatabase();
+app.get('/api/v1/listings', async (req, res) => {
+  const listings = await getListings();
   const lat = parseFloat(req.query.lat) || 19.076;
   const lon = parseFloat(req.query.lon) || 72.877;
   const radius = parseFloat(req.query.radiusKm) || 50;
@@ -283,7 +297,7 @@ app.get('/api/v1/listings', (req, res) => {
 });
 
 // 4. POST New Material Listing to Database with User Attribution
-app.post('/api/v1/listings', (req, res) => {
+app.post('/api/v1/listings', async (req, res) => {
   const {
     title,
     materialType,
@@ -308,7 +322,7 @@ app.post('/api/v1/listings', (req, res) => {
     return res.status(401).json({ error: 'Sign in before posting so you can manage your listing and buyer inquiries.' });
   }
 
-  const listings = readDatabase();
+  const listings = await getListings();
 
   const newListing = {
     id: Date.now(),
@@ -341,7 +355,7 @@ app.post('/api/v1/listings', (req, res) => {
   const carbon = computeAvoidedCarbon(newListing.materialType, newListing.quantity, 10, newListing.grade);
 
   listings.unshift(newListing);
-  saveDatabase(listings);
+  await saveDatabase([newListing]);
 
   console.log(`[API] New Material Listing Posted by @${newListing.createdBy} (${newListing.companyName}): ID ${newListing.id} - ${newListing.title}`);
 
@@ -354,7 +368,7 @@ app.post('/api/v1/listings', (req, res) => {
 });
 
 app.delete('/api/v1/listings/:id', async (req, res) => {
-  const listings = readDatabase();
+  const listings = await getListings();
   const index = listings.findIndex(item => String(item.id) === String(req.params.id));
   if (index === -1) {
     return res.status(404).json({ error: 'Listing not found.' });
@@ -363,7 +377,7 @@ app.delete('/api/v1/listings/:id', async (req, res) => {
     return res.status(403).json({ error: 'Only the listing owner can delete this listing.' });
   }
   const [deleted] = listings.splice(index, 1);
-  saveDatabase(listings);
+  await saveDatabase(listings);
 
   const client = getNeonClient();
   if (client) {
@@ -386,8 +400,8 @@ app.post('/api/v1/carbon/calculate', (req, res) => {
 });
 
 // 6. Eco-Logistics Route Optimization
-app.post('/api/v1/logistics/optimize-route', (req, res) => {
-  const listings = readDatabase();
+app.post('/api/v1/logistics/optimize-route', async (req, res) => {
+  const listings = await getListings();
   const route = solveOptimizedBackhaulRoute(listings);
   res.json(route);
 });
