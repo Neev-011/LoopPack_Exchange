@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { MessageSquare, Pencil, Save, Send, X } from 'lucide-react';
+import { MessageSquare, Pencil, Save, Send, Trash2, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
@@ -115,6 +115,22 @@ export default function AccountHubPage({ view = 'materials' }) {
     }
   };
 
+  const deleteListing = async (listing) => {
+    if (!window.confirm(`Delete "${listing.title}"? This cannot be undone.`)) return;
+    try {
+      const response = await fetch(`${API_BASE_URL}/listings/${listing.id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: currentUser.username })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not delete listing.');
+      setListings(current => current.filter(item => item.id !== listing.id));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   if (!currentUser) {
     return <div style={{ background: 'white', padding: 32, borderRadius: 12 }}>Please sign in to manage inquiries and listings.</div>;
   }
@@ -135,7 +151,10 @@ export default function AccountHubPage({ view = 'materials' }) {
           {listings.map(item => (
             <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '14px 0', borderBottom: '1px solid #E2E8F0' }}>
               <div><strong>{item.title}</strong><div style={{ color: '#64748B', fontSize: 13 }}>{item.quantity} {item.unit} · ₹{item.price}</div></div>
-              <button className="btn-secondary" onClick={() => setEditing({ ...item })}><Pencil size={14} /> Edit</button>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <button className="btn-secondary" onClick={() => setEditing({ ...item })}><Pencil size={14} /> Edit</button>
+                <button className="btn-secondary" onClick={() => deleteListing(item)} style={{ color: '#B91C1C', borderColor: '#FCA5A5' }}><Trash2 size={14} /> Delete</button>
+              </div>
             </div>
           ))}
         </section>

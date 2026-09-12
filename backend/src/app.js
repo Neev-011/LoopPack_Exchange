@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeAvoidedCarbon } from './services/carbonEngineService.js';
 import { searchListingsPostGIS } from './services/spatialService.js';
-import { solveOptimizedBackhaulRoute } from './services/vrpSolverService.js';
+import { isNeonConnected, getNeonClient } from './config/neonDb.js';
 import { detectMaterialFromImage } from './services/imageDetectionService.js';
 import {
   createInquiry,
@@ -134,7 +134,7 @@ function readDatabase() {
   }
 }
 
-// Helper to save DB to disk
+// Helper to save DB to disk and sync with Neon PostgreSQL
 function saveDatabase(listings) {
   try {
     const dir = path.dirname(DB_FILE);
@@ -142,6 +142,45 @@ function saveDatabase(listings) {
       fs.mkdirSync(dir, { recursive: true });
     }
     fs.writeFileSync(DB_FILE, JSON.stringify(listings, null, 2), 'utf8');
+
+    // Sync listings into Neon PostgreSQL database if connected
+    const client = getNeonClient();
+    if (client) {
+      (async () => {
+        try {
+          for (const l of listings) {
+            await client`
+              INSERT INTO listings (
+                id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_at
+              ) VALUES (
+                ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade || 'A'},
+                ${l.location || ''}, ${l.lat || 19.08}, ${l.lon || 72.88}, ${l.price || 0}, ${l.isFree || false}, ${l.description || ''},
+                ${l.image || ''}, ${l.createdBy || 'anonymous'}, ${l.companyName || 'B2B Partner'}, ${l.ownerRole || 'Supplier'},
+                ${l.createdAt || new Date().toISOString()}
+              )
+              ON CONFLICT (id) DO UPDATE SET
+                title = EXCLUDED.title,
+                material_type = EXCLUDED.material_type,
+                quantity = EXCLUDED.quantity,
+                unit = EXCLUDED.unit,
+                grade = EXCLUDED.grade,
+                location = EXCLUDED.location,
+                lat = EXCLUDED.lat,
+                lon = EXCLUDED.lon,
+                price = EXCLUDED.price,
+                is_free = EXCLUDED.is_free,
+                description = EXCLUDED.description,
+                image = EXCLUDED.image,
+                created_by = EXCLUDED.created_by,
+                company_name = EXCLUDED.company_name,
+                owner_role = EXCLUDED.owner_role
+            `;
+          }
+        } catch (dbErr) {
+          console.error('[Neon DB Sync Error]:', dbErr.message);
+        }
+      })();
+    }
   } catch (err) {
     console.error('Error saving DB file:', err);
   }
@@ -153,8 +192,14 @@ app.get('/api/v1/health', (req, res) => {
   res.json({
     status: 'OK',
     system: 'LoopPack Exchange B2B API Gateway',
-    database: 'Persistent JSON Database Active',
-    totalListings: listings.length
+    database: isNeonConnected ? 'Neon Serverless PostgreSQL Database Active' : 'Persistent JSON Database Active',
+    neonDatabaseConnected: isNeonConnected,
+    totalListings: listings.length,
+    envConfig: {
+      geminiKeyConfigured: !!process.env.GEMINI_API_KEY,
+      geminiModel: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
+      databaseUrlConfigured: !!process.env.DATABASE_URL
+    }
   });
 });
 
@@ -306,6 +351,31 @@ app.post('/api/v1/listings', (req, res) => {
     data: newListing,
     carbonSavings: carbon
   });
+});
+
+app.delete('/api/v1/listings/:id', async (req, res) => {
+  const listings = readDatabase();
+  const index = listings.findIndex(item => String(item.id) === String(req.params.id));
+  if (index === -1) {
+    return res.status(404).json({ error: 'Listing not found.' });
+  }
+  if (!req.body?.username || listings[index].createdBy !== req.body.username) {
+    return res.status(403).json({ error: 'Only the listing owner can delete this listing.' });
+  }
+  const [deleted] = listings.splice(index, 1);
+  saveDatabase(listings);
+
+  const client = getNeonClient();
+  if (client) {
+    try {
+      await client`DELETE FROM listings WHERE id = ${String(req.params.id)}`;
+    } catch (e) {
+      console.error('[Neon DB Delete Error]:', e.message);
+    }
+  }
+
+  console.log(`[API] Material listing deleted by @${req.body.username}: ID ${deleted.id}`);
+  return res.json({ status: 'success', message: 'Material listing deleted.', data: deleted });
 });
 
 // 5. ISO Carbon Accounting Endpoint
