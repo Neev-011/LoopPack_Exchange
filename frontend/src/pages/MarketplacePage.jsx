@@ -67,6 +67,33 @@ const MOCK_FALLBACK_LISTINGS = [
   }
 ];
 
+const AVAILABLE_BACKHAUL_TRUCKS = [
+  {
+    id: 'VR-8042',
+    carrier: 'Mahindra Logistics',
+    vehicle: 'Tata 407 (2.5T Cargo Box)',
+    returnRoute: 'Thane West Fleet Depot to Navi Mumbai',
+    availableAt: '09:30 AM',
+    capacity: '2.5T'
+  },
+  {
+    id: 'VR-9104',
+    carrier: 'Rivigo Freight',
+    vehicle: 'Eicher 11.10 (6.0T High Deck)',
+    returnRoute: 'Bhiwandi Warehousing Gateway to Mumbai',
+    availableAt: '01:15 PM',
+    capacity: '6.0T'
+  },
+  {
+    id: 'VR-4210',
+    carrier: 'BlueDart EcoBackhaul',
+    vehicle: 'Ashok Leyland Boss (4.5T EV Container)',
+    returnRoute: 'Turbhe Vashi Hub to Taloja',
+    availableAt: '08:45 AM',
+    capacity: '4.5T'
+  }
+];
+
 function normalizeListing(listing) {
   return {
     ...listing,
@@ -81,6 +108,7 @@ export default function MarketplacePage() {
   const [filterType, setFilterType] = useState('all');
   const [maxRadius, setMaxRadius] = useState(25);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedTruckId, setSelectedTruckId] = useState('');
   const [claimedItem, setClaimedItem] = useState(null);
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
@@ -97,6 +125,7 @@ export default function MarketplacePage() {
   useEffect(() => {
     setInquiryMessage('');
     setInquirySent(false);
+    setSelectedTruckId('');
     setOrderError('');
     setOrderDetails({
       quantity: selectedProduct?.quantity || '',
@@ -141,6 +170,11 @@ export default function MarketplacePage() {
       setOrderError('Please sign in before reserving material.');
       return;
     }
+    const selectedTruck = AVAILABLE_BACKHAUL_TRUCKS.find(truck => truck.id === selectedTruckId);
+    if (!selectedTruck) {
+      setOrderError('Select an empty-return truck before reserving material.');
+      return;
+    }
     setOrdering(true);
     setOrderError('');
     try {
@@ -157,14 +191,15 @@ export default function MarketplacePage() {
           },
           quantity: Number(orderDetails.quantity),
           destination: orderDetails.destination,
-          paymentMethod: orderDetails.paymentMethod
+          paymentMethod: orderDetails.paymentMethod,
+          truck: selectedTruck
         })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not complete reservation.');
       setDbListings(current => current.filter(item => String(item.id) !== String(selectedProduct.id)));
       setSelectedProduct(null);
-      setClaimedItem({ ...selectedProduct, order: data.data });
+      setClaimedItem({ ...selectedProduct, order: data.data, selectedTruck });
     } catch (error) {
       setOrderError(error.message);
     } finally {
@@ -293,7 +328,7 @@ export default function MarketplacePage() {
           <div>
             <div style={{ fontWeight: '700', fontSize: '1rem' }}>Pickup Order Reserved!</div>
             <div style={{ fontSize: '0.85rem', color: '#A7F3D0' }}>
-              Backhaul truck assigned to {claimedItem.location} for {claimedItem.title}.
+              {claimedItem.selectedTruck.vehicle} ({claimedItem.selectedTruck.id}) assigned to {claimedItem.location} for {claimedItem.title}.
             </div>
           </div>
         </div>
@@ -571,6 +606,44 @@ export default function MarketplacePage() {
                 )}
               </div>
 
+              <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', padding: '16px', borderRadius: '10px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#14532D', margin: '0 0 5px', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <Truck size={17} /> Available empty-return trucks
+                </h4>
+                <p style={{ fontSize: '0.82rem', color: '#166534', margin: '0 0 12px' }}>
+                  Select a truck returning empty from a retail delivery for this pickup.
+                </p>
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {AVAILABLE_BACKHAUL_TRUCKS.map(truck => {
+                    const isSelected = selectedTruckId === truck.id;
+                    return (
+                      <button
+                        key={truck.id}
+                        type="button"
+                        onClick={() => setSelectedTruckId(truck.id)}
+                        style={{
+                          textAlign: 'left',
+                          padding: '12px',
+                          borderRadius: '8px',
+                          border: isSelected ? '2px solid #059669' : '1px solid #D1FAE5',
+                          background: isSelected ? '#DCFCE7' : 'white',
+                          cursor: 'pointer',
+                          color: '#0F172A'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                          <strong>{truck.vehicle}</strong>
+                          <span style={{ color: '#047857', fontWeight: '700', fontSize: '0.8rem' }}>{truck.id} · {truck.capacity}</span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '4px' }}>
+                          {truck.carrier} · {truck.returnRoute} · Empty at {truck.availableAt}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Checkout and reservation */}
               <form onSubmit={handleConfirmReserve} style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', padding: 16, borderRadius: 10, marginTop: 24 }}>
                 <h4 style={{ margin: '0 0 12px', color: '#065F46' }}>Complete reservation</h4>
@@ -593,7 +666,7 @@ export default function MarketplacePage() {
                     <option>Pay on pickup</option>
                   </select>
                 </label>
-                <button className="btn-primary" type="submit" disabled={ordering || isOwnListing} style={{ width: '100%', justifyContent: 'center', marginTop: 14 }}>
+                <button className="btn-primary" type="submit" disabled={ordering || isOwnListing || !selectedTruckId} style={{ width: '100%', justifyContent: 'center', marginTop: 14, opacity: selectedTruckId ? 1 : 0.55 }}>
                   <Truck size={18} /> {ordering ? 'Processing reservation...' : 'Confirm purchase & dispatch pickup'}
                 </button>
               </form>
