@@ -93,7 +93,7 @@ export default function MarketplacePage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h2 style={{ fontSize: '1.8rem', color: '#0F172A', fontWeight: '800' }}>
-            Module 2: PostGIS Geo-Proximity Marketplace
+            Geo-Proximity B2B Marketplace
           </h2>
           <p style={{ color: '#64748B', fontSize: '0.92rem' }}>
             Showing available B2B packaging material lots within 25 km radius of your location.
