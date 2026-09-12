@@ -129,6 +129,7 @@ async function main() {
   await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS transport_distance_km NUMERIC`;
   await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS transport_emissions_kg NUMERIC`;
   await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS net_co2e_avoided NUMERIC`;
+  await sql`ALTER TABLE sales_orders DROP CONSTRAINT IF EXISTS sales_orders_listing_fk`;
   await sql`
     CREATE TABLE IF NOT EXISTS trucks (
       id VARCHAR(64) PRIMARY KEY,

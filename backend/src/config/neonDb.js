@@ -180,12 +180,7 @@ export async function initNeonTables() {
     await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS pickup_date VARCHAR(40)`;
     await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS pickup_time VARCHAR(20)`;
     await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS delivery_address JSONB`;
-    await client`DELETE FROM sales_orders WHERE NOT EXISTS (SELECT 1 FROM listings WHERE listings.id = sales_orders.listing_id)`;
-    try {
-      await client`ALTER TABLE sales_orders ADD CONSTRAINT sales_orders_listing_fk FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE`;
-    } catch (error) {
-      if (!/already exists/i.test(error.message)) throw error;
-    }
+    await client`ALTER TABLE sales_orders DROP CONSTRAINT IF EXISTS sales_orders_listing_fk`;
 
     // 4. Users Table
     await client`

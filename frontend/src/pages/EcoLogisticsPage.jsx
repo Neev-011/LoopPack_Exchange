@@ -218,7 +218,7 @@ export default function EcoLogisticsPage({ setActiveTab }) {
     e.preventDefault();
     if (!isLogisticsUser) return;
     if (!originLocationSet || !originCoordinates || !Number.isFinite(Number(originCoordinates.lat)) || !Number.isFinite(Number(originCoordinates.lon))) {
-      setErrorMsg('Click “Set location and return to site” after choosing the truck origin.');
+      setErrorMsg('Choose the exact truck origin and confirm the pickup location before listing the vehicle.');
       return;
     }
 

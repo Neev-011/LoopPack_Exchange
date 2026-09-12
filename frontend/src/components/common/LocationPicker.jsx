@@ -5,7 +5,17 @@ import 'leaflet/dist/leaflet.css';
 
 const DEFAULT_PIN = { lat: 19.076, lng: 72.8777 };
 
-export default function LocationPicker({ location, setLocation, coordinates, setCoordinates, status, onUseCurrentLocation, onSetLocation, onLocationChange }) {
+export default function LocationPicker({
+  location,
+  setLocation,
+  coordinates,
+  setCoordinates,
+  status,
+  onUseCurrentLocation,
+  onSetLocation,
+  onLocationChange,
+  addressContent
+}) {
   const [locationSet, setLocationSet] = useState(false);
   const [draftPin, setDraftPin] = useState(null);
   const mapRef = useRef(null);
@@ -95,14 +105,16 @@ export default function LocationPicker({ location, setLocation, coordinates, set
           <MapPin size={15} /> Set selected pin location
         </button>
       </div>
-      <input
-        type="text"
-        value={location}
-        onChange={event => changeLocation(() => setLocation(event.target.value))}
-        placeholder="Warehouse, office, or organization address"
-        style={{ width: '100%', padding: '10px', borderRadius: '7px', border: '1px solid #CBD5E1', marginBottom: '9px' }}
-        required
-      />
+      {addressContent || (
+        <input
+          type="text"
+          value={location}
+          onChange={event => changeLocation(() => setLocation(event.target.value))}
+          placeholder="Warehouse, office, or organization address"
+          style={{ width: '100%', padding: '10px', borderRadius: '7px', border: '1px solid #CBD5E1', marginBottom: '9px' }}
+          required
+        />
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '9px' }}>
         <input
           type="number"
@@ -143,7 +155,7 @@ export default function LocationPicker({ location, setLocation, coordinates, set
         }}
         style={{ width: '100%', justifyContent: 'center', marginTop: '12px', padding: '9px' }}
       >
-        <MapPin size={15} /> {locationSet ? 'Location set for this listing' : 'Set location and return to site'}
+        <MapPin size={15} /> {locationSet ? 'Pickup location confirmed' : 'Confirm pickup location'}
       </button>
     </div>
   );
