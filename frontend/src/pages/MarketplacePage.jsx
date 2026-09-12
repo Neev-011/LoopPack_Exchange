@@ -137,6 +137,7 @@ const MOCK_LISTINGS = [
 ];
 
 export default function MarketplacePage() {
+  const [dbListings, setDbListings] = useState(MOCK_LISTINGS);
   const [filterType, setFilterType] = useState('all');
   const [gradeFilter, setGradeFilter] = useState('all');
   const [maxRadius, setMaxRadius] = useState(25); // km
@@ -144,15 +145,59 @@ export default function MarketplacePage() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [claimedItem, setClaimedItem] = useState(null);
 
+  // Fetch live listings from backend API
+  React.useEffect(() => {
+    async function fetchBackendListings() {
+      try {
+        const res = await fetch('http://localhost:5001/api/v1/listings');
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data && json.data.length > 0) {
+            // Format backend items with icons and radar properties
+            const formatted = json.data.map((item, idx) => ({
+              id: item.id || idx + 1,
+              title: item.title,
+              materialType: item.materialType,
+              categoryName: item.materialType === 'pallet' ? 'Wooden Pallets' : item.materialType === 'hdpe' ? 'HDPE Drums' : item.materialType === 'ldpe' ? 'LDPE Wrap' : 'Cardboard Boxes',
+              icon: item.materialType === 'pallet' ? '🪵' : item.materialType === 'hdpe' ? '🛢️' : item.materialType === 'ldpe' ? '🌀' : '📦',
+              quantity: item.quantity || 100,
+              unit: item.unit || 'units',
+              grade: item.grade || 'A',
+              gradeLabel: `Grade ${item.grade || 'A'}`,
+              conditionScore: item.grade === 'A' ? 95 : 82,
+              moisturePercent: 2,
+              plyRating: 'Standard B2B',
+              truckloadPct: Math.min(95, Math.max(20, Math.floor((item.quantity / 500) * 100))),
+              location: item.location || 'Warehouse District',
+              lat: item.lat || 19.08,
+              lon: item.lon || 72.88,
+              distanceKm: item.distanceKm || 5.0,
+              bearingDeg: (idx * 65 + 35) % 360,
+              transitTimeMin: Math.max(10, Math.round(item.distanceKm * 2.5)),
+              price: item.price || 0,
+              virginPrice: (item.price || 20) * 3,
+              isFree: item.isFree || item.price === 0,
+              image: item.image || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'
+            }));
+            setDbListings(formatted);
+          }
+        }
+      } catch (err) {
+        console.warn('Backend API fetch offline, using mock listings fallback:', err);
+      }
+    }
+    fetchBackendListings();
+  }, []);
+
   // Filter listings based on category, grade, and proximity radius
   const filteredListings = useMemo(() => {
-    return MOCK_LISTINGS.filter(item => {
+    return dbListings.filter(item => {
       const matchType = filterType === 'all' || item.materialType === filterType;
       const matchGrade = gradeFilter === 'all' || item.grade === gradeFilter;
       const matchRadius = item.distanceKm <= maxRadius;
       return matchType && matchGrade && matchRadius;
     });
-  }, [filterType, gradeFilter, maxRadius]);
+  }, [dbListings, filterType, gradeFilter, maxRadius]);
 
   // Aggregate non-verbal statistics for current view
   const stats = useMemo(() => {
