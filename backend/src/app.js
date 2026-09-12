@@ -308,6 +308,21 @@ app.post('/api/v1/listings', (req, res) => {
   });
 });
 
+app.delete('/api/v1/listings/:id', (req, res) => {
+  const listings = readDatabase();
+  const index = listings.findIndex(item => String(item.id) === String(req.params.id));
+  if (index === -1) {
+    return res.status(404).json({ error: 'Listing not found.' });
+  }
+  if (!req.body?.username || listings[index].createdBy !== req.body.username) {
+    return res.status(403).json({ error: 'Only the listing owner can delete this listing.' });
+  }
+  const [deleted] = listings.splice(index, 1);
+  saveDatabase(listings);
+  console.log(`[API] Material listing deleted by @${req.body.username}: ID ${deleted.id}`);
+  return res.json({ status: 'success', message: 'Material listing deleted.', data: deleted });
+});
+
 // 5. ISO Carbon Accounting Endpoint
 app.post('/api/v1/carbon/calculate', (req, res) => {
   const { materialType, quantity, distanceKm, grade } = req.body;
