@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import MaterialScanner from '../components/ai-grader/MaterialScanner';
 import LocationPicker from '../components/common/LocationPicker';
 import { calculateAvoidedCarbon } from '../utils/carbonEngine';
-import { PlusCircle, MapPin, CheckCircle, Leaf, Loader2, RefreshCw } from 'lucide-react';
+import { PlusCircle, MapPin, CheckCircle, Leaf, Loader2, RefreshCw, Sparkles, UserCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
@@ -22,6 +22,7 @@ export default function CreateListingPage({ setActiveTab }) {
   const [pickupCoordinates, setPickupCoordinates] = useState(null);
   const [pickupLocationSet, setPickupLocationSet] = useState(false);
   const [locationStatus, setLocationStatus] = useState('loading');
+  const [aiVerified, setAiVerified] = useState(false);
 
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -51,20 +52,57 @@ export default function CreateListingPage({ setActiveTab }) {
   useEffect(() => {
     requestLocation();
   }, []);
+  if (currentUser?.role === 'logistics') {
+    return (
+      <div style={{ maxWidth: '720px', margin: '40px auto', background: 'white', padding: '36px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 14px rgba(0,0,0,0.05)', textAlign: 'center' }}>
+        <h3 style={{ fontSize: '1.4rem', color: '#0F172A', fontWeight: '800', marginBottom: '12px' }}>
+          🚚 Logistics Partner Account Active
+        </h3>
+        <p style={{ color: '#64748B', fontSize: '0.96rem', marginBottom: '24px', lineHeight: 1.5 }}>
+          Material listing and packaging sales are reserved for Buyer & Supplier Organizations. As a Logistics Carrier, you can manage your fleet, backhaul trips, and route optimizations in the Eco-Logistics Carrier Hub.
+        </p>
+        <button
+          className="btn-primary"
+          onClick={() => setActiveTab('logistics')}
+          style={{ padding: '12px 24px', fontSize: '1rem' }}
+        >
+          Go to Eco-Logistics Carrier Hub
+        </button>
+      </div>
+    );
+  }
 
   const handleAIScanResult = (res) => {
-    if (res.isPackaging === false) {
-      setScannedImage(null);
-      setMaterialType('cardboard');
-      setGrade('A');
-      setErrorMsg('Uploaded photo was rejected as non-packaging. Please upload a valid packaging photo.');
+    if (!res || res.isPackaging === false) {
+      if (res && res.image) setScannedImage(res.image);
+      setAiVerified(false);
+      setErrorMsg('Uploaded photo was not verified as packaging by AI Vision. Flagged as Seller Direct Post.');
       return;
     }
     setErrorMsg(null);
+    setAiVerified(true);
     if (res.image) setScannedImage(res.image);
     if (res.detectedType) setMaterialType(res.detectedType);
     if (res.suggestedGrade) setGrade(res.suggestedGrade);
     if (res.materialName && !title) setTitle(`100x ${res.materialName}`);
+  };
+
+  const handleDirectPhotoUpload = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('Please select a valid image file (JPEG, PNG, WebP).');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setScannedImage(event.target.result);
+      setAiVerified(false);
+      setErrorMsg(null);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSubmit = async (e) => {
@@ -76,6 +114,10 @@ export default function CreateListingPage({ setActiveTab }) {
     if (!pickupLocationSet || !pickupCoordinates || !Number.isFinite(Number(pickupCoordinates.lat)) || !Number.isFinite(Number(pickupCoordinates.lon))) {
       setErrorMsg('Click “Set location and return to site” after choosing the exact pickup point.');
       requestLocation();
+      return;
+    }
+    if (!['supplier', 'buyer'].includes(currentUser.role)) {
+      setErrorMsg('Only Buyer / Seller Organization accounts can post materials.');
       return;
     }
     const cleanQuantity = Math.max(1, Number(quantity) || 1);
@@ -102,10 +144,13 @@ export default function CreateListingPage({ setActiveTab }) {
       description: description || `Verified Grade ${grade} ${materialType} circular scrap lot ready for B2B pickup.`,
       image: scannedImage,
       createdBy: currentUser?.username,
+      role: currentUser?.role,
       companyName: currentUser?.companyName,
       ownerRole: currentUser?.roleLabel,
       createdByEmail: currentUser?.email || 'contact@looppack.io',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      aiVerified: Boolean(aiVerified),
+      verificationStatus: aiVerified ? 'AI Verified' : 'Seller Direct'
     };
 
     try {
@@ -151,6 +196,52 @@ export default function CreateListingPage({ setActiveTab }) {
         <MaterialScanner onScanned={handleAIScanResult} />
       </div>
 
+      {/* Verification Status Indicator Banner */}
+      <div style={{
+        padding: '14px 18px',
+        borderRadius: '10px',
+        marginBottom: '24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        background: aiVerified ? '#ECFDF5' : '#FEF3C7',
+        border: aiVerified ? '1px solid #A7F3D0' : '1px solid #FCD34D',
+        color: aiVerified ? '#047857' : '#92400E'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {aiVerified ? <Sparkles size={22} color="#059669" /> : <UserCheck size={22} color="#D97706" />}
+          <div>
+            <div style={{ fontWeight: '800', fontSize: '0.94rem' }}>
+              {aiVerified ? '✨ Category & Grade Verified by AI Scanner' : '👤 Direct Seller Listing (Unverified AI)'}
+            </div>
+            <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>
+              {aiVerified
+                ? 'Material type and quality grade were automatically analyzed and verified via vision AI scanner.'
+                : 'This item will be flagged as "Seller Direct Post" on the marketplace unless verified with the AI scanner above.'}
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAiVerified(!aiVerified)}
+          style={{
+            fontSize: '0.76rem',
+            fontWeight: '800',
+            padding: '5px 12px',
+            borderRadius: '6px',
+            background: aiVerified ? '#D1FAE5' : '#FFFBEB',
+            border: aiVerified ? '1px solid #6EE7B7' : '1px solid #FDE68A',
+            color: aiVerified ? '#065F46' : '#B45309',
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+          title="Click to toggle between AI Verified and Seller Direct status"
+        >
+          {aiVerified ? '✨ AI Verified' : '👤 Seller Direct'}
+        </button>
+      </div>
+
       {submitted && (
         <div style={{ background: '#ECFDF5', border: '1px solid #10B981', color: '#047857', padding: '16px', borderRadius: '10px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
           <CheckCircle size={22} color="#10B981" />
@@ -179,6 +270,67 @@ export default function CreateListingPage({ setActiveTab }) {
       />
 
       <form onSubmit={handleSubmit} style={{ background: 'white', padding: '32px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
+        {/* Item Photo Upload & Preview Section */}
+        <div style={{ marginBottom: '24px', background: '#F8FAFC', padding: '18px', borderRadius: '10px', border: '1px solid #E2E8F0' }}>
+          <label style={{ display: 'block', fontWeight: '700', fontSize: '0.92rem', color: '#0F172A', marginBottom: '4px' }}>
+            📷 Material Item Photo
+          </label>
+          <p style={{ fontSize: '0.82rem', color: '#64748B', marginBottom: '12px' }}>
+            {scannedImage
+              ? 'Photo attached to listing. You can change or replace it below.'
+              : 'Upload a custom photo of your material to display on the marketplace (or use the AI Vision Scanner above).'}
+          </p>
+
+          {scannedImage ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{ position: 'relative', width: '90px', height: '90px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #CBD5E1', flexShrink: 0 }}>
+                <img src={scannedImage} alt="Uploaded packaging" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+              <div>
+                <div style={{
+                  fontSize: '0.8rem',
+                  fontWeight: '800',
+                  color: aiVerified ? '#047857' : '#92400E',
+                  background: aiVerified ? '#ECFDF5' : '#FEF3C7',
+                  border: aiVerified ? '1px solid #A7F3D0' : '1px solid #FCD34D',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  marginBottom: '8px'
+                }}>
+                  {aiVerified ? <Sparkles size={14} color="#059669" /> : <UserCheck size={14} color="#D97706" />}
+                  {aiVerified ? 'Photo & Category Verified by AI Vision' : 'Seller Direct Custom Photo'}
+                </div>
+                <div>
+                  <label style={{ fontSize: '0.8rem', color: '#2563EB', fontWeight: '700', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <RefreshCw size={12} /> Replace Photo
+                    <input type="file" accept="image/*" onChange={handleDirectPhotoUpload} style={{ display: 'none' }} />
+                  </label>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handleDirectPhotoUpload}
+                style={{
+                  width: '100%',
+                  padding: '10px',
+                  borderRadius: '8px',
+                  border: '1px dashed #CBD5E1',
+                  background: 'white',
+                  fontSize: '0.88rem',
+                  cursor: 'pointer'
+                }}
+              />
+            </div>
+          )}
+        </div>
+
         <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', fontWeight: '600', fontSize: '0.9rem', marginBottom: '6px' }}>Listing Title</label>
           <input
@@ -191,7 +343,7 @@ export default function CreateListingPage({ setActiveTab }) {
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        <div className="responsive-grid-2" style={{ marginBottom: '20px' }}>
           <div>
             <label style={{ display: 'block', fontWeight: '600', fontSize: '0.9rem', marginBottom: '6px' }}>Packaging Material Type</label>
             <select
@@ -220,7 +372,7 @@ export default function CreateListingPage({ setActiveTab }) {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        <div className="responsive-grid-3" style={{ marginBottom: '20px' }}>
           <div>
             <label style={{ display: 'block', fontWeight: '600', fontSize: '0.9rem', marginBottom: '6px' }}>Quantity</label>
             <input

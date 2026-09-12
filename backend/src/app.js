@@ -9,6 +9,7 @@ import { isNeonConnected, getNeonClient } from './config/neonDb.js';
 import { detectMaterialFromImage } from './services/imageDetectionService.js';
 import {
   createInquiry,
+  deleteInquiriesForListing,
   getInquiriesForUser,
   updateInquiryStatus,
   getMessages,
@@ -49,12 +50,20 @@ function requestUser(req) {
   return {
     id: req.body?.userId,
     username: req.body?.username,
-    companyName: req.body?.companyName
+    companyName: req.body?.companyName,
+    role: req.body?.role
   };
+}
+
+function isCommercialRole(role) {
+  return role === 'supplier' || role === 'buyer';
 }
 
 app.post('/api/v1/inquiries', async (req, res) => {
   try {
+    if (!isCommercialRole(req.body?.role)) {
+      return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can contact sellers.' });
+    }
     const inquiry = await createInquiry({
       listing: req.body?.listing,
       buyer: requestUser(req),
@@ -69,8 +78,12 @@ app.post('/api/v1/inquiries', async (req, res) => {
 
 app.get('/api/v1/inquiries', async (req, res) => {
   try {
+    const requestedView = req.query.role === 'seller' ? 'seller' : 'buyer';
+    if (!isCommercialRole(req.query.userRole)) {
+      return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can view inquiries.' });
+    }
     const user = { id: req.query.userId, username: req.query.username, companyName: req.query.companyName };
-    res.json({ data: await getInquiriesForUser(user, req.query.role === 'seller' ? 'seller' : 'buyer') });
+    res.json({ data: await getInquiriesForUser(user, requestedView) });
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
   }
@@ -78,6 +91,9 @@ app.get('/api/v1/inquiries', async (req, res) => {
 
 app.patch('/api/v1/inquiries/:id', async (req, res) => {
   try {
+    if (!isCommercialRole(req.body?.role)) {
+      return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can manage inquiries.' });
+    }
     const item = await updateInquiryStatus(req.params.id, requestUser(req), req.body?.status);
     res.json({ status: 'success', data: item });
   } catch (err) {
@@ -86,6 +102,9 @@ app.patch('/api/v1/inquiries/:id', async (req, res) => {
 });
 
 app.patch('/api/v1/listings/:id', async (req, res) => {
+  if (!isCommercialRole(req.body?.role)) {
+    return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can edit listings.' });
+  }
   const listings = await getListings();
   const index = listings.findIndex(item => String(item.id) === String(req.params.id));
   if (index === -1) return res.status(404).json({ error: 'Listing not found.' });
@@ -125,7 +144,7 @@ app.patch('/api/v1/listings/:id', async (req, res) => {
 
 app.get('/api/v1/inquiries/:id/messages', async (req, res) => {
   try {
-    const user = { id: req.query.userId, username: req.query.username, companyName: req.query.companyName };
+    const user = { id: req.query.userId, username: req.query.username, companyName: req.query.companyName, role: req.query.role };
     res.json({ data: await getMessages(req.params.id, user) });
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
@@ -163,7 +182,10 @@ app.post('/api/v1/exchanges/completed', async (req, res) => {
 
 app.post('/api/v1/orders', async (req, res) => {
   try {
-    const { listingId, buyer, quantity, destination, paymentMethod, buyerLocation } = req.body || {};
+  const { listingId, buyer, quantity, destination, deliveryAddress, paymentMethod, pickupDate, pickupTime, logisticsVehicle, logisticsCandidates, buyerLocation } = req.body || {};
+    if (!isCommercialRole(buyer?.role)) {
+      return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can purchase materials.' });
+    }
     if (!buyer?.id || !buyer?.username || !buyer?.companyName || !buyer?.email) {
       return res.status(401).json({ error: 'Sign in with a complete buyer profile before reserving material.' });
     }
@@ -185,6 +207,13 @@ app.post('/api/v1/orders', async (req, res) => {
     if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0 || requestedQuantity > Number(listing.quantity)) {
       return res.status(400).json({ error: `Quantity must be between 1 and ${listing.quantity}.` });
     }
+    const transportDistanceKm = Number(logisticsVehicle?.estimate?.distanceKm);
+    const carbon = computeAvoidedCarbon(
+      listing.material_type,
+      requestedQuantity,
+      Number.isFinite(transportDistanceKm) && transportDistanceKm > 0 ? transportDistanceKm : Number(listing.distance_km || 10),
+      listing.grade
+    );
     const order = {
       id: `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       listingId: String(listing.id),
@@ -200,20 +229,39 @@ app.post('/api/v1/orders', async (req, res) => {
       totalPrice: (Number(listing.price) || 0) * requestedQuantity,
       destination: destination.trim(),
       buyerLocation: { lat: buyerLat, lon: buyerLon },
+      deliveryAddress: deliveryAddress || null,
       paymentMethod: paymentMethod.trim(),
-      status: 'completed',
+      pickupDate: pickupDate || null,
+      pickupTime: pickupTime || null,
+      status: 'pending',
+      logisticsStatus: 'pending',
+      logisticsCandidates: Array.isArray(logisticsCandidates) ? logisticsCandidates : [],
+      logisticsRequestHistory: [],
+      logisticsVehicle: logisticsVehicle
+        ? {
+            ...logisticsVehicle,
+            estimate: {
+              ...(logisticsVehicle.estimate || {}),
+              distanceKm: transportDistanceKm,
+              transportEmissionsKg: carbon.eTransport
+            }
+          }
+        : null,
+      transportDistanceKm: carbon.eTransport > 0 ? (carbon.eTransport / ((carbon.totalWeightKg / 1000) * 0.00016)) : null,
+      transportEmissionsKg: carbon.eTransport,
+      netCO2eAvoided: carbon.netCO2eAvoided,
       listingSnapshot: listing
     };
     await client`
       INSERT INTO sales_orders (
         id, listing_id, listing_title, seller_username, buyer_id, buyer_username, buyer_company,
-        buyer_email, quantity, unit, unit_price, total_price, destination, buyer_location,
-        payment_method, status, listing_snapshot
+  buyer_email, quantity, unit, unit_price, total_price, destination, buyer_location, payment_method,
+  pickup_date, pickup_time, delivery_address, status, logistics_status, logistics_vehicle, logistics_candidates, logistics_request_history, transport_distance_km, transport_emissions_kg, net_co2e_avoided, listing_snapshot
       ) VALUES (
         ${order.id}, ${order.listingId}, ${order.listingTitle}, ${order.sellerUsername}, ${order.buyerId},
         ${order.buyerUsername}, ${order.buyerCompany}, ${order.buyerEmail}, ${order.quantity}, ${order.unit},
-        ${order.unitPrice}, ${order.totalPrice}, ${order.destination}, ${JSON.stringify(order.buyerLocation)}, ${order.paymentMethod},
-        ${order.status}, ${JSON.stringify(order.listingSnapshot)}
+  ${order.unitPrice}, ${order.totalPrice}, ${order.destination}, ${JSON.stringify(order.buyerLocation)}, ${order.paymentMethod},
+        ${order.pickupDate}, ${order.pickupTime}, ${order.deliveryAddress ? JSON.stringify(order.deliveryAddress) : null}, ${order.status}, ${order.logisticsStatus}, ${order.logisticsVehicle ? JSON.stringify(order.logisticsVehicle) : null}, ${JSON.stringify(order.logisticsCandidates)}, ${JSON.stringify(order.logisticsRequestHistory)}, ${order.transportDistanceKm}, ${order.transportEmissionsKg}, ${order.netCO2eAvoided}, ${JSON.stringify(order.listingSnapshot)}
       )
     `;
     await recordCompletedExchange({
@@ -224,7 +272,9 @@ app.post('/api/v1/orders', async (req, res) => {
         quantity: requestedQuantity,
         unit: listing.unit,
         grade: listing.grade,
-        distanceKm: Number(listing.distance_km || listing.distanceKm || 10)
+        distanceKm: Number.isFinite(transportDistanceKm) && transportDistanceKm > 0
+          ? transportDistanceKm
+          : Number(listing.distance_km || listing.distanceKm || 10)
       },
       buyer
     });
@@ -244,18 +294,100 @@ app.get('/api/v1/orders', async (req, res) => {
     if (!client) return res.json({ data: [] });
     const rows = req.query.role === 'buyer'
       ? await client`SELECT * FROM sales_orders WHERE buyer_username = ${username} ORDER BY created_at DESC`
-      : await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`;
+      : req.query.role === 'logistics'
+        ? await client`SELECT * FROM sales_orders WHERE logistics_vehicle->>'createdBy' = ${username} ORDER BY created_at DESC`
+        : await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`;
     res.json({ data: rows.map(row => ({
       id: row.id, listingId: row.listing_id, listingTitle: row.listing_title,
       sellerUsername: row.seller_username, buyerId: row.buyer_id, buyerUsername: row.buyer_username,
       buyerCompany: row.buyer_company, buyerEmail: row.buyer_email, quantity: Number(row.quantity),
       unit: row.unit, unitPrice: Number(row.unit_price), totalPrice: Number(row.total_price),
-      destination: row.destination, paymentMethod: row.payment_method, status: row.status,
-      buyerLocation: row.buyer_location,
+      destination: row.destination, deliveryAddress: row.delivery_address, paymentMethod: row.payment_method, status: row.status,
+  buyerLocation: row.buyer_location,
+      pickupDate: row.pickup_date, pickupTime: row.pickup_time, logisticsStatus: row.logistics_status, logisticsVehicle: row.logistics_vehicle,
+      logisticsCandidates: row.logistics_candidates, logisticsRequestHistory: row.logistics_request_history,
+      transportDistanceKm: Number(row.transport_distance_km), transportEmissionsKg: Number(row.transport_emissions_kg),
+      netCO2eAvoided: Number(row.net_co2e_avoided),
       listingSnapshot: row.listing_snapshot, createdAt: row.created_at
     })) });
   } catch (err) {
     res.status(500).json({ error: 'Could not load completed sales.' });
+  }
+});
+
+app.patch('/api/v1/orders/:id/logistics-status', async (req, res) => {
+  try {
+    const { username, role, status } = req.body || {};
+    if (role !== 'logistics') {
+      return res.status(403).json({ error: 'Only logistics partners can update transport requests.' });
+    }
+    if (!['accepted', 'rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Transport requests can only be accepted or rejected.' });
+    }
+    const client = getNeonClient();
+    if (!client) return res.status(503).json({ error: 'Database is unavailable.' });
+    const orders = await client`
+      SELECT * FROM sales_orders
+      WHERE id = ${req.params.id}
+        AND logistics_vehicle->>'createdBy' = ${username}
+        AND logistics_status = 'pending'
+      LIMIT 1
+    `;
+    if (!orders.length) {
+      return res.status(404).json({ error: 'Pending transport request not found for this logistics partner.' });
+    }
+    const order = orders[0];
+    const currentVehicle = order.logistics_vehicle || {};
+    const history = Array.isArray(order.logistics_request_history) ? order.logistics_request_history : [];
+    const updatedHistory = [...history, {
+      vehicleId: currentVehicle.id,
+      vehicleName: currentVehicle.truckName,
+      provider: currentVehicle.companyName,
+      providerUsername: currentVehicle.createdBy,
+      status,
+      contactedAt: new Date().toISOString()
+    }];
+
+    if (status === 'accepted') {
+      const rows = await client`
+        UPDATE sales_orders
+        SET logistics_status = 'confirmed',
+            status = 'logistics_confirmed',
+            logistics_request_history = ${JSON.stringify(updatedHistory)}
+        WHERE id = ${req.params.id} AND logistics_status = 'pending'
+        RETURNING id, logistics_status, status, logistics_vehicle, logistics_request_history
+      `;
+      return res.json({ status: 'success', data: rows[0] });
+    }
+
+    const candidates = Array.isArray(order.logistics_candidates) ? order.logistics_candidates : [];
+    const contactedIds = new Set(updatedHistory.map(item => String(item.vehicleId)));
+    const nextVehicle = candidates.find(vehicle => !contactedIds.has(String(vehicle.id)));
+    if (!nextVehicle) {
+      const rows = await client`
+        UPDATE sales_orders
+        SET logistics_status = 'no_logistics_available',
+            status = 'no_logistics_available',
+            logistics_request_history = ${JSON.stringify(updatedHistory)}
+        WHERE id = ${req.params.id} AND logistics_status = 'pending'
+        RETURNING id, logistics_status, status, logistics_request_history
+      `;
+      return res.json({ status: 'success', data: rows[0] });
+    }
+
+    const rows = await client`
+      UPDATE sales_orders
+      SET logistics_status = 'pending',
+          status = 'pending',
+          logistics_vehicle = ${JSON.stringify(nextVehicle)},
+          logistics_request_history = ${JSON.stringify(updatedHistory)}
+      WHERE id = ${req.params.id} AND logistics_status = 'pending'
+      RETURNING id, logistics_status, status, logistics_vehicle, logistics_request_history
+    `;
+    res.json({ status: 'success', data: rows[0] });
+  } catch (err) {
+    console.error('[Orders] logistics status update failed:', err.message);
+    res.status(500).json({ error: 'Could not update the transport request.' });
   }
 });
 
@@ -273,31 +405,53 @@ function readDatabase() {
   }
 }
 
+async function initDatabaseSchema() {
+  const client = getNeonClient();
+  if (client) {
+    try {
+      await client`ALTER TABLE listings ADD COLUMN IF NOT EXISTS ai_verified BOOLEAN DEFAULT false`;
+      await client`ALTER TABLE listings ADD COLUMN IF NOT EXISTS verification_status VARCHAR(50) DEFAULT 'Seller Direct'`;
+      console.log('[DB Schema] Verified ai_verified and verification_status columns in Neon PostgreSQL.');
+    } catch (err) {
+      console.warn('[DB Schema] Migration warning:', err.message);
+    }
+  }
+}
+initDatabaseSchema();
+
 async function getListings() {
   const client = getNeonClient();
   if (!client) return readDatabase();
 
   const rows = await client`SELECT * FROM listings ORDER BY created_at DESC`;
-  return rows.map(row => ({
-    id: row.id,
-    title: row.title,
-    materialType: row.material_type,
-    quantity: Number(row.quantity),
-    unit: row.unit,
-    grade: row.grade,
-    location: row.location,
-    lat: Number(row.lat),
-    lon: Number(row.lon),
-    price: Number(row.price),
-    isFree: row.is_free,
-    description: row.description,
-    image: row.image,
-    createdBy: row.created_by,
-    companyName: row.company_name,
-    ownerRole: row.owner_role,
-    createdByEmail: row.created_by_email || '',
-    createdAt: row.created_at
-  }));
+  return rows.map(row => {
+    const isVerified = row.ai_verified !== null && row.ai_verified !== undefined
+      ? Boolean(row.ai_verified)
+      : (row.aiVerified !== null && row.aiVerified !== undefined ? Boolean(row.aiVerified) : false);
+
+    return {
+      id: row.id,
+      title: row.title,
+      materialType: row.material_type,
+      quantity: Number(row.quantity),
+      unit: row.unit,
+      grade: row.grade,
+      location: row.location,
+      lat: Number(row.lat),
+      lon: Number(row.lon),
+      price: Number(row.price),
+      isFree: row.is_free,
+      description: row.description,
+      image: row.image,
+      createdBy: row.created_by,
+      companyName: row.company_name,
+      ownerRole: row.owner_role,
+      createdByEmail: row.created_by_email || '',
+      aiVerified: isVerified,
+      verificationStatus: row.verification_status || (isVerified ? 'AI Verified' : 'Seller Direct'),
+      createdAt: row.created_at
+    };
+  });
 }
 
 // Neon is the primary store when configured. JSON is only a local fallback.
@@ -305,22 +459,43 @@ async function saveDatabase(listings) {
   const client = getNeonClient();
   if (client) {
     for (const l of listings) {
-      await client`
-        INSERT INTO listings (
-          id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_by_email, created_at
-        ) VALUES (
-          ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade || 'A'},
-          ${l.location || ''}, ${l.lat || 19.08}, ${l.lon || 72.88}, ${l.price || 0}, ${l.isFree || false}, ${l.description || ''},
-          ${l.image || ''}, ${l.createdBy || 'anonymous'}, ${l.companyName || 'B2B Partner'}, ${l.ownerRole || 'Supplier'},
-          ${l.createdByEmail || ''}, ${l.createdAt || new Date().toISOString()}
-        )
-        ON CONFLICT (id) DO UPDATE SET
-          title = EXCLUDED.title, material_type = EXCLUDED.material_type, quantity = EXCLUDED.quantity,
-          unit = EXCLUDED.unit, grade = EXCLUDED.grade, location = EXCLUDED.location, lat = EXCLUDED.lat,
-          lon = EXCLUDED.lon, price = EXCLUDED.price, is_free = EXCLUDED.is_free, description = EXCLUDED.description,
-          image = EXCLUDED.image, created_by = EXCLUDED.created_by, company_name = EXCLUDED.company_name,
-          owner_role = EXCLUDED.owner_role, created_by_email = EXCLUDED.created_by_email
-      `;
+      try {
+        await client`
+          INSERT INTO listings (
+            id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_by_email, ai_verified, verification_status, created_at
+          ) VALUES (
+            ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade || 'A'},
+            ${l.location || ''}, ${l.lat || 19.08}, ${l.lon || 72.88}, ${l.price || 0}, ${l.isFree || false}, ${l.description || ''},
+            ${l.image || ''}, ${l.createdBy || 'anonymous'}, ${l.companyName || 'B2B Partner'}, ${l.ownerRole || 'Supplier'},
+            ${l.createdByEmail || ''}, ${Boolean(l.aiVerified)}, ${l.verificationStatus || (l.aiVerified ? 'AI Verified' : 'Seller Direct')}, ${l.createdAt || new Date().toISOString()}
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            title = EXCLUDED.title, material_type = EXCLUDED.material_type, quantity = EXCLUDED.quantity,
+            unit = EXCLUDED.unit, grade = EXCLUDED.grade, location = EXCLUDED.location, lat = EXCLUDED.lat,
+            lon = EXCLUDED.lon, price = EXCLUDED.price, is_free = EXCLUDED.is_free, description = EXCLUDED.description,
+            image = EXCLUDED.image, created_by = EXCLUDED.created_by, company_name = EXCLUDED.company_name,
+            owner_role = EXCLUDED.owner_role, created_by_email = EXCLUDED.created_by_email,
+            ai_verified = EXCLUDED.ai_verified, verification_status = EXCLUDED.verification_status
+        `;
+      } catch (dbErr) {
+        console.warn('[DB] SQL insert column fallback:', dbErr.message);
+        await client`
+          INSERT INTO listings (
+            id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_by_email, created_at
+          ) VALUES (
+            ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade || 'A'},
+            ${l.location || ''}, ${l.lat || 19.08}, ${l.lon || 72.88}, ${l.price || 0}, ${l.isFree || false}, ${l.description || ''},
+            ${l.image || ''}, ${l.createdBy || 'anonymous'}, ${l.companyName || 'B2B Partner'}, ${l.ownerRole || 'Supplier'},
+            ${l.createdByEmail || ''}, ${l.createdAt || new Date().toISOString()}
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            title = EXCLUDED.title, material_type = EXCLUDED.material_type, quantity = EXCLUDED.quantity,
+            unit = EXCLUDED.unit, grade = EXCLUDED.grade, location = EXCLUDED.location, lat = EXCLUDED.lat,
+            lon = EXCLUDED.lon, price = EXCLUDED.price, is_free = EXCLUDED.is_free, description = EXCLUDED.description,
+            image = EXCLUDED.image, created_by = EXCLUDED.created_by, company_name = EXCLUDED.company_name,
+            owner_role = EXCLUDED.owner_role, created_by_email = EXCLUDED.created_by_email
+        `;
+      }
     }
     return;
   }
@@ -458,6 +633,9 @@ app.post('/api/v1/listings', async (req, res) => {
   if (!createdBy || !companyName) {
     return res.status(401).json({ error: 'Sign in before posting so you can manage your listing and buyer inquiries.' });
   }
+  if (!isCommercialRole(req.body?.role)) {
+    return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can post materials.' });
+  }
 
   if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon)) || Number(lat) < -90 || Number(lat) > 90 || Number(lon) < -180 || Number(lon) > 180) {
     return res.status(400).json({ error: 'A valid device latitude and longitude are required for proximity tracking.' });
@@ -491,8 +669,10 @@ app.post('/api/v1/listings', async (req, res) => {
     description: description || 'Verified circular packaging material lot.',
     createdBy,
     companyName,
-    ownerRole: ownerRole || 'Packaging Supplier',
+    ownerRole: ownerRole || 'Buyer / Seller Organization',
     createdByEmail: createdByEmail || 'contact@looppack.io',
+    aiVerified: req.body.aiVerified !== undefined ? Boolean(req.body.aiVerified) : false,
+    verificationStatus: req.body.verificationStatus || (req.body.aiVerified ? 'AI Verified' : 'Seller Direct'),
     image: image || (materialType === 'pallet' 
       ? 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?auto=format&fit=crop&w=600&q=80'
       : materialType === 'hdpe'
@@ -520,6 +700,9 @@ app.post('/api/v1/listings', async (req, res) => {
 });
 
 app.delete('/api/v1/listings/:id', async (req, res) => {
+  if (!isCommercialRole(req.body?.role)) {
+    return res.status(403).json({ error: 'Only Buyer / Seller Organization accounts can delete listings.' });
+  }
   const listings = await getListings();
   const index = listings.findIndex(item => String(item.id) === String(req.params.id));
   if (index === -1) {
@@ -529,15 +712,17 @@ app.delete('/api/v1/listings/:id', async (req, res) => {
     return res.status(403).json({ error: 'Only the listing owner can delete this listing.' });
   }
   const [deleted] = listings.splice(index, 1);
-  await saveDatabase(listings);
+  try {
+    await deleteInquiriesForListing(req.params.id);
+    await saveDatabase(listings);
 
-  const client = getNeonClient();
-  if (client) {
-    try {
+    const client = getNeonClient();
+    if (client) {
       await client`DELETE FROM listings WHERE id = ${String(req.params.id)}`;
-    } catch (e) {
-      console.error('[Neon DB Delete Error]:', e.message);
     }
+  } catch (error) {
+    console.error('[Listing delete failed]:', error.message);
+    return res.status(500).json({ error: 'The material could not be deleted completely. Please retry after checking the database connection.' });
   }
 
   console.log(`[API] Material listing deleted by @${req.body.username}: ID ${deleted.id}`);
@@ -553,6 +738,9 @@ app.post('/api/v1/carbon/calculate', (req, res) => {
 
 // 6. Google OR-Tools & OSRM VRP Logistics Backhaul Route Optimizer Endpoint
 app.post('/api/v1/logistics/optimize-route', async (req, res) => {
+  if (req.body?.role !== 'logistics') {
+    return res.status(403).json({ error: 'Only logistics accounts can optimize delivery rides.' });
+  }
   try {
     const { pickups, depot, dropFacility, originCity, destinationCity } = req.body || {};
 
@@ -655,7 +843,10 @@ app.get('/api/v1/trucks', async (req, res) => {
         capacityTons: Number(r.capacity_tons),
         originCity: r.origin_city,
         destinationCity: r.destination_city,
+        pickupAddress: r.pickup_address,
+        deliveryAddress: r.delivery_address,
         availableDate: r.available_date,
+        availableTime: r.available_time,
         ratePerKm: Number(r.rate_per_km),
         driverName: r.driver_name,
         driverPhone: r.driver_phone,
@@ -692,7 +883,10 @@ app.post('/api/v1/trucks', async (req, res) => {
     capacityTons,
     originCity,
     destinationCity,
+    pickupAddress,
+    deliveryAddress,
     availableDate,
+    availableTime,
     ratePerKm,
     driverName,
     driverPhone,
@@ -710,6 +904,9 @@ app.post('/api/v1/trucks', async (req, res) => {
   if (!createdBy || !companyName) {
     return res.status(401).json({ error: 'Sign in with a registered Logistics Carrier account before listing a truck.' });
   }
+  if (req.body?.role !== 'logistics') {
+    return res.status(403).json({ error: 'Only logistics accounts can list and manage rides.' });
+  }
 
   const cleanCap = Math.max(0.5, Number(capacityTons) || 1);
   const cleanRate = Math.max(0, Number(ratePerKm) || 0);
@@ -721,7 +918,10 @@ app.post('/api/v1/trucks', async (req, res) => {
     capacityTons: cleanCap,
     originCity,
     destinationCity,
+    pickupAddress: pickupAddress || null,
+    deliveryAddress: deliveryAddress || null,
     availableDate: availableDate || 'Available Now',
+    availableTime: availableTime || '09:00',
     ratePerKm: cleanRate,
     driverName: driverName || 'Assigned Carrier Driver',
     driverPhone: driverPhone || '+91 98000 00000',
@@ -740,10 +940,10 @@ app.post('/api/v1/trucks', async (req, res) => {
     try {
       await client`
         INSERT INTO trucks (
-          id, truck_name, vehicle_reg, capacity_tons, origin_city, destination_city, available_date, rate_per_km, driver_name, driver_phone, status, created_by, company_name, company_email, lat, lon, location_updated_at, created_at
+          id, truck_name, vehicle_reg, capacity_tons, origin_city, destination_city, pickup_address, delivery_address, available_date, available_time, rate_per_km, driver_name, driver_phone, status, created_by, company_name, company_email, lat, lon, location_updated_at, created_at
         ) VALUES (
           ${newTruck.id}, ${newTruck.truckName}, ${newTruck.vehicleReg}, ${newTruck.capacityTons},
-          ${newTruck.originCity}, ${newTruck.destinationCity}, ${newTruck.availableDate}, ${newTruck.ratePerKm},
+          ${newTruck.originCity}, ${newTruck.destinationCity}, ${newTruck.pickupAddress ? JSON.stringify(newTruck.pickupAddress) : null}, ${newTruck.deliveryAddress ? JSON.stringify(newTruck.deliveryAddress) : null}, ${newTruck.availableDate}, ${newTruck.availableTime}, ${newTruck.ratePerKm},
           ${newTruck.driverName}, ${newTruck.driverPhone}, ${newTruck.status}, ${newTruck.createdBy},
           ${newTruck.companyName}, ${newTruck.companyEmail}, ${newTruck.lat}, ${newTruck.lon}, ${newTruck.locationUpdatedAt}, ${newTruck.createdAt}
         )
@@ -785,7 +985,10 @@ app.patch('/api/v1/trucks/:id/location', async (req, res) => {
 });
 
 app.delete('/api/v1/trucks/:id', async (req, res) => {
-  const { username } = req.body || {};
+  const { username, role } = req.body || {};
+  if (role !== 'logistics') {
+    return res.status(403).json({ error: 'Only logistics accounts can remove rides.' });
+  }
   const client = getNeonClient();
   if (client) {
     try {
@@ -796,6 +999,25 @@ app.delete('/api/v1/trucks/:id', async (req, res) => {
     }
   }
   res.json({ status: 'success', message: 'Truck listing deleted.' });
+});
+
+app.patch('/api/v1/trucks/:id/status', async (req, res) => {
+  const { username, role, status } = req.body || {};
+  if (role !== 'logistics') {
+    return res.status(403).json({ error: 'Only logistics accounts can accept or reject rides.' });
+  }
+  if (!['accepted', 'rejected', 'available'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid ride status.' });
+  }
+  const client = getNeonClient();
+  if (!client) return res.status(503).json({ error: 'Database is unavailable.' });
+  const rows = await client`
+    UPDATE trucks SET status = ${status}
+    WHERE id = ${req.params.id} AND created_by = ${username}
+    RETURNING id, status
+  `;
+  if (!rows.length) return res.status(404).json({ error: 'Ride not found or not owned by this logistics account.' });
+  res.json({ status: 'success', data: rows[0] });
 });
 
 export default app;

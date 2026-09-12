@@ -75,7 +75,7 @@ export default function AuthPage({ setActiveTab }) {
       const user = await login({ usernameOrEmail, password });
       setSuccessMsg(`Welcome back, ${user.companyName}!`);
       setTimeout(() => {
-        setActiveTab('marketplace');
+        setActiveTab(user.role === 'logistics' ? 'logistics' : 'marketplace');
       }, 700);
     } catch (err) {
       setErrorMsg(err.message);
@@ -107,7 +107,7 @@ export default function AuthPage({ setActiveTab }) {
       });
       setSuccessMsg(`Organization registered successfully! Welcome, ${user.companyName}.`);
       setTimeout(() => {
-        setActiveTab('marketplace');
+        setActiveTab(user.role === 'logistics' ? 'logistics' : 'marketplace');
       }, 700);
     } catch (err) {
       setErrorMsg(err.message);
@@ -568,8 +568,7 @@ export default function AuthPage({ setActiveTab }) {
                     outline: 'none'
                   }}
                 >
-                  <option value="supplier">Packaging Supplier</option>
-                  <option value="buyer">Buyer / Recycler</option>
+                  <option value="supplier">Buyer / Seller Organization</option>
                   <option value="logistics">Logistics Partner</option>
                 </select>
               </div>
@@ -864,7 +863,7 @@ export default function AuthPage({ setActiveTab }) {
                 onClick={() => {
                   switchAccount(user);
                   setSuccessMsg(`Switched to active enterprise: ${user.companyName}`);
-                  setTimeout(() => setActiveTab('marketplace'), 600);
+                  setTimeout(() => setActiveTab(user.role === 'logistics' ? 'logistics' : 'marketplace'), 600);
                 }}
                 style={{
                   background: isActive ? '#ECFDF5' : '#FFFFFF',

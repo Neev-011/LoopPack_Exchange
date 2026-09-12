@@ -122,6 +122,21 @@ export async function initNeonTables() {
       )
     `;
 
+    // Remove legacy orphan rows before enforcing cascading ownership relationships.
+    await client`DELETE FROM messages WHERE NOT EXISTS (SELECT 1 FROM inquiries WHERE inquiries.id = messages.inquiry_id)`;
+    await client`DELETE FROM inquiries WHERE listing_id IS NULL OR NOT EXISTS (SELECT 1 FROM listings WHERE listings.id = inquiries.listing_id)`;
+    await client`ALTER TABLE inquiries ALTER COLUMN listing_id SET NOT NULL`;
+    try {
+      await client`ALTER TABLE inquiries ADD CONSTRAINT inquiries_listing_fk FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE`;
+    } catch (error) {
+      if (!/already exists/i.test(error.message)) throw error;
+    }
+    try {
+      await client`ALTER TABLE messages ADD CONSTRAINT messages_inquiry_fk FOREIGN KEY (inquiry_id) REFERENCES inquiries(id) ON DELETE CASCADE`;
+    } catch (error) {
+      if (!/already exists/i.test(error.message)) throw error;
+    }
+
     await client`
       CREATE TABLE IF NOT EXISTS sales_orders (
         id VARCHAR(80) PRIMARY KEY,
@@ -138,13 +153,39 @@ export async function initNeonTables() {
         total_price NUMERIC DEFAULT 0,
         destination TEXT NOT NULL,
         buyer_location JSONB,
+        pickup_date VARCHAR(40),
+        pickup_time VARCHAR(20),
+        delivery_address JSONB,
         payment_method VARCHAR(80) NOT NULL,
         status VARCHAR(40) DEFAULT 'completed',
+        logistics_status VARCHAR(40) DEFAULT 'pending',
+        logistics_vehicle JSONB,
+        logistics_candidates JSONB,
+        logistics_request_history JSONB DEFAULT '[]'::jsonb,
+        transport_distance_km NUMERIC,
+        transport_emissions_kg NUMERIC,
+        net_co2e_avoided NUMERIC,
         listing_snapshot JSONB NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
     await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS buyer_location JSONB`;
+    await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS logistics_status VARCHAR(40) DEFAULT 'pending'`;
+    await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS logistics_vehicle JSONB`;
+    await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS logistics_candidates JSONB`;
+    await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS logistics_request_history JSONB DEFAULT '[]'::jsonb`;
+    await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS transport_distance_km NUMERIC`;
+    await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS transport_emissions_kg NUMERIC`;
+    await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS net_co2e_avoided NUMERIC`;
+    await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS pickup_date VARCHAR(40)`;
+    await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS pickup_time VARCHAR(20)`;
+    await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS delivery_address JSONB`;
+    await client`DELETE FROM sales_orders WHERE NOT EXISTS (SELECT 1 FROM listings WHERE listings.id = sales_orders.listing_id)`;
+    try {
+      await client`ALTER TABLE sales_orders ADD CONSTRAINT sales_orders_listing_fk FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE`;
+    } catch (error) {
+      if (!/already exists/i.test(error.message)) throw error;
+    }
 
     // 4. Users Table
     await client`
@@ -172,7 +213,10 @@ export async function initNeonTables() {
         capacity_tons NUMERIC NOT NULL,
         origin_city VARCHAR(255) NOT NULL,
         destination_city VARCHAR(255) NOT NULL,
+        pickup_address JSONB,
+        delivery_address JSONB,
         available_date VARCHAR(100),
+        available_time VARCHAR(50),
         rate_per_km NUMERIC DEFAULT 0,
         driver_name VARCHAR(100),
         driver_phone VARCHAR(50),
@@ -189,6 +233,9 @@ export async function initNeonTables() {
     await client`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS lat NUMERIC`;
     await client`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS lon NUMERIC`;
     await client`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS location_updated_at TIMESTAMP WITH TIME ZONE`;
+    await client`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS available_time VARCHAR(50)`;
+    await client`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS pickup_address JSONB`;
+    await client`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS delivery_address JSONB`;
 
     isNeonConnected = true;
     console.log('[Neon DB] PostgreSQL tables (listings, inquiries, messages, sales_orders, users, trucks) verified/created successfully!');

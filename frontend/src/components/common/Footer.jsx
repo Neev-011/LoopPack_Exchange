@@ -17,7 +17,7 @@ export default function Footer() {
           <span>•</span>
           <span>PostGIS Spatial Engine</span>
           <span>•</span>
-          <span>Google OR-Tools Logistics Solver</span>
+          <span>Logistics Matching</span>
         </div>
         <div style={{ color: '#64748B', fontSize: '0.8rem', marginTop: '10px' }}>
           © 2026 LoopPack Exchange. All rights reserved.
