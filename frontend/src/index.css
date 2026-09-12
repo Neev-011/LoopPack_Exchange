@@ -560,3 +560,61 @@ h1, h2, h3, h4, h5, h6 {
   .impact-table-value { text-align: left !important; margin-top: 5px; }
   .impact-table-value::before { content: 'Impact: '; color: #94A3B8; font-weight: 400; }
 }
+
+/* Glassmorphic Dropdown & UI Micro-Animations */
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.user-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 285px;
+  background: #FFFFFF;
+  backdrop-filter: blur(16px);
+  border: 1px solid #CBD5E1;
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 10px;
+  z-index: 2500;
+  animation: dropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dropdown-item-btn {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #1E293B;
+  font-size: 0.88rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dropdown-item-btn:hover {
+  background: #ECFDF5;
+  border-color: #A7F3D0;
+  color: #047857;
+  transform: translateX(3px);
+}
+
+.dropdown-item-btn.active {
+  background: #D1FAE5;
+  border-color: #6EE7B7;
+  color: #065F46;
+}
+

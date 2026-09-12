@@ -99,11 +99,11 @@ export default function Navbar({ activeTab, setActiveTab }) {
                 gap: '10px',
                 padding: '6px 14px',
                 borderRadius: '10px',
-                background: 'rgba(15, 23, 42, 0.9)',
-                border: '1px solid rgba(16, 185, 129, 0.4)',
-                color: 'white',
+                background: '#FFFFFF',
+                border: '1px solid #CBD5E1',
+                color: '#0F172A',
                 cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.2)',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
                 transition: 'all 0.2s ease'
               }}
             >
@@ -123,17 +123,17 @@ export default function Navbar({ activeTab, setActiveTab }) {
               </div>
 
               <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: '0.88rem', fontWeight: '800', color: 'white', lineHeight: 1.1 }}>
+                <div style={{ fontSize: '0.88rem', fontWeight: '800', color: '#0F172A', lineHeight: 1.1 }}>
                   {currentUser.companyName.length > 18 ? currentUser.companyName.slice(0, 16) + '...' : currentUser.companyName}
                 </div>
-                <div style={{ fontSize: '0.72rem', color: '#A7F3D0', fontWeight: '600', marginTop: '2px' }}>
+                <div style={{ fontSize: '0.72rem', color: '#047857', fontWeight: '700', marginTop: '2px' }}>
                   @{currentUser.username}
                 </div>
               </div>
 
               <ChevronDown
                 size={16}
-                color="#A7F3D0"
+                color="#059669"
                 style={{
                   transform: dropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                   transition: 'transform 0.2s ease',
@@ -144,176 +144,102 @@ export default function Navbar({ activeTab, setActiveTab }) {
 
             {/* DROPDOWN MENU CONTENT */}
             {dropdownOpen && (
-              <div style={{
-                position: 'absolute',
-                top: 'calc(100% + 8px)',
-                right: 0,
-                width: '260px',
-                background: '#0F172A',
-                border: '1px solid rgba(255, 255, 255, 0.15)',
-                borderRadius: '12px',
-                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.4)',
-                padding: '8px',
-                zIndex: 2000,
-                animation: 'fadeIn 0.15s ease-out'
-              }}>
+              <div className="user-dropdown-menu">
                 {/* Account Info Badge */}
                 <div style={{
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  background: 'rgba(16, 185, 129, 0.1)',
-                  border: '1px solid rgba(16, 185, 129, 0.2)',
-                  marginBottom: '6px'
+                  padding: '12px',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #ECFDF5 0%, #E6F4EA 100%)',
+                  border: '1px solid #A7F3D0',
+                  marginBottom: '8px'
                 }}>
-                  <div style={{ fontSize: '0.72rem', color: '#94A3B8', textTransform: 'uppercase', fontWeight: '700' }}>Enterprise Signed In</div>
-                  <div style={{ fontSize: '0.9rem', fontWeight: '800', color: 'white' }}>{currentUser.companyName}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#34D399', fontWeight: '600' }}>
+                  <div style={{ fontSize: '0.7rem', color: '#047857', textTransform: 'uppercase', fontWeight: '800', letterSpacing: '0.05em' }}>
+                    Enterprise Signed In
+                  </div>
+                  <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#0F172A', marginTop: '2px' }}>
+                    {currentUser.companyName}
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: '#059669', fontWeight: '700', marginTop: '2px' }}>
                     Role: {['supplier', 'buyer'].includes(currentUser.role) ? 'Buyer / Seller Organization' : currentUser.role === 'logistics' ? 'Logistics Partner' : currentUser.roleLabel || 'Existing account role'}
                   </div>
                 </div>
 
-                <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.1)', margin: '4px 0' }} />
+                <div style={{ height: '1px', background: '#E2E8F0', margin: '6px 0' }} />
 
                 {/* Dropdown Navigation Options */}
                 <button
+                  className={`dropdown-item-btn ${activeTab === 'account' ? 'active' : ''}`}
                   onClick={() => handleNavClick('account')}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: activeTab === 'account' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
-                    color: activeTab === 'account' ? '#34D399' : '#E2E8F0',
-                    fontSize: '0.88rem',
-                    fontWeight: '600',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
                 >
-                  <PackageCheck size={18} color="#10B981" />
+                  <PackageCheck size={18} color="#059669" />
                   <div>
-                    <div>My Listed Materials</div>
-                    <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Manage lots & price edits</div>
+                    <div style={{ fontWeight: '700' }}>My Listed Materials</div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Manage lots & price edits</div>
                   </div>
                 </button>
 
                 {currentUser && (
                   <button
+                    className={`dropdown-item-btn ${activeTab === 'purchases' ? 'active' : ''}`}
                     onClick={() => handleNavClick('purchases')}
-                    style={{
-                      width: '100%', padding: '10px 12px', borderRadius: '8px', border: 'none',
-                      background: activeTab === 'purchases' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
-                      color: activeTab === 'purchases' ? '#34D399' : '#E2E8F0', fontSize: '0.88rem',
-                      fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', textAlign: 'left'
-                    }}
                   >
-                    <ShoppingBag size={18} color="#34D399" />
+                    <ShoppingBag size={18} color="#059669" />
                     <div>
-                      <div>My Purchases</div>
-                      <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Orders & delivery details</div>
+                      <div style={{ fontWeight: '700' }}>My Purchases</div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Orders & delivery details</div>
                     </div>
                   </button>
                 )}
 
                 {currentUser && (
                   <button
+                    className={`dropdown-item-btn ${activeTab === 'sales' ? 'active' : ''}`}
                     onClick={() => handleNavClick('sales')}
-                    style={{
-                      width: '100%', padding: '10px 12px', borderRadius: '8px', border: 'none',
-                      background: activeTab === 'sales' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
-                      color: activeTab === 'sales' ? '#34D399' : '#E2E8F0', fontSize: '0.88rem',
-                      fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', textAlign: 'left'
-                    }}
                   >
-                    <ShoppingBag size={18} color="#F59E0B" />
+                    <ShoppingBag size={18} color="#D97706" />
                     <div>
-                      <div>Sales History</div>
-                      <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Orders and buyer details</div>
+                      <div style={{ fontWeight: '700' }}>Sales History</div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Orders and buyer details</div>
                     </div>
                   </button>
                 )}
 
                 <button
+                  className={`dropdown-item-btn ${activeTab === 'inquiries' ? 'active' : ''}`}
                   onClick={() => handleNavClick('inquiries')}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: activeTab === 'inquiries' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
-                    color: activeTab === 'inquiries' ? '#34D399' : '#E2E8F0',
-                    fontSize: '0.88rem',
-                    fontWeight: '600',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
                 >
-                  <MessageSquare size={18} color="#3B82F6" />
+                  <MessageSquare size={18} color="#2563EB" />
                   <div>
-                    <div>My B2B Inquiries & Chat</div>
-                    <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Active buyer & seller negotiation</div>
+                    <div style={{ fontWeight: '700' }}>My B2B Inquiries & Chat</div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Active buyer & seller negotiation</div>
                   </div>
                 </button>
 
                 {currentUser?.role === 'logistics' && (
                   <button
+                    className={`dropdown-item-btn ${activeTab === 'logistics' ? 'active' : ''}`}
                     onClick={() => handleNavClick('logistics')}
-                    style={{
-                      width: '100%',
-                      padding: '10px 12px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: activeTab === 'logistics' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
-                      color: activeTab === 'logistics' ? '#34D399' : '#E2E8F0',
-                      fontSize: '0.88rem',
-                      fontWeight: '600',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '10px',
-                      cursor: 'pointer',
-                      textAlign: 'left'
-                    }}
                   >
-                    <Route size={18} color="#F59E0B" />
+                    <Route size={18} color="#D97706" />
                     <div>
-                      <div>Eco-Logistics Carrier Hub</div>
-                      <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Fleet dispatch & VRP optimizer</div>
+                      <div style={{ fontWeight: '700' }}>Eco-Logistics Carrier Hub</div>
+                      <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Fleet dispatch & VRP optimizer</div>
                     </div>
                   </button>
                 )}
 
                 <button
+                  className={`dropdown-item-btn ${activeTab === 'profile' ? 'active' : ''}`}
                   onClick={() => handleNavClick('profile')}
-                  style={{
-                    width: '100%',
-                    padding: '10px 12px',
-                    borderRadius: '8px',
-                    border: 'none',
-                    background: activeTab === 'profile' ? 'rgba(16, 185, 129, 0.2)' : 'transparent',
-                    color: activeTab === 'profile' ? '#34D399' : '#E2E8F0',
-                    fontSize: '0.88rem',
-                    fontWeight: '600',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
                 >
-                  <User size={18} color="#F59E0B" />
+                  <User size={18} color="#D97706" />
                   <div>
-                    <div>Company Profile Settings</div>
-                    <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Address, contacts & password</div>
+                    <div style={{ fontWeight: '700' }}>Company Profile Settings</div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748B', fontWeight: '500' }}>Address, contacts & password</div>
                   </div>
                 </button>
 
-                <div style={{ height: '1px', background: 'rgba(255, 255, 255, 0.1)', margin: '6px 0' }} />
+                <div style={{ height: '1px', background: '#E2E8F0', margin: '6px 0' }} />
 
                 <button
                   onClick={() => handleNavClick('create-listing')}
@@ -321,19 +247,20 @@ export default function Navbar({ activeTab, setActiveTab }) {
                     width: '100%',
                     padding: '10px 12px',
                     borderRadius: '8px',
-                    border: 'none',
-                    background: 'rgba(16, 185, 129, 0.15)',
-                    color: '#A7F3D0',
+                    border: '1px solid #A7F3D0',
+                    background: 'linear-gradient(135deg, #ECFDF5 0%, #D1FAE5 100%)',
+                    color: '#047857',
                     fontSize: '0.88rem',
                     fontWeight: '700',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '10px',
                     cursor: 'pointer',
-                    marginBottom: '4px'
+                    marginBottom: '4px',
+                    transition: 'all 0.2s ease'
                   }}
                 >
-                  <PlusCircle size={18} color="#34D399" />
+                  <PlusCircle size={18} color="#059669" />
                   <div>Post New Material</div>
                 </button>
 
@@ -347,18 +274,19 @@ export default function Navbar({ activeTab, setActiveTab }) {
                     width: '100%',
                     padding: '10px 12px',
                     borderRadius: '8px',
-                    border: 'none',
-                    background: 'rgba(239, 68, 68, 0.15)',
-                    color: '#FCA5A5',
+                    border: '1px solid #FCA5A5',
+                    background: '#FEF2F2',
+                    color: '#DC2626',
                     fontSize: '0.85rem',
                     fontWeight: '700',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '10px',
-                    cursor: 'pointer'
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease'
                   }}
                 >
-                  <LogOut size={16} /> Sign Out Account
+                  <LogOut size={16} color="#DC2626" /> Sign Out Account
                 </button>
               </div>
             )}

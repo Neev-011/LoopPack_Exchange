@@ -287,8 +287,8 @@ export default function MarketplacePage() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <MapPin size={16} color="#10B981" />
-            <span style={{ fontSize: '0.86rem', fontWeight: '700', color: '#0F172A' }}>
-              Distance Radius: <strong style={{ color: '#059669', fontSize: '0.95rem' }}>{maxRadius >= 100 ? '100+ km (All)' : `${maxRadius} km`}</strong>
+            <span style={{ fontSize: '0.86rem', fontWeight: '700', color: '#0F172A', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              Distance Radius: <strong style={{ color: '#059669', fontSize: '0.92rem', minWidth: '112px', display: 'inline-block' }}>{maxRadius >= 100 ? '100+ km (All)' : `${maxRadius} km`}</strong>
             </span>
           </div>
 
