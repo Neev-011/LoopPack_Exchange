@@ -67,6 +67,33 @@ const MOCK_FALLBACK_LISTINGS = [
   }
 ];
 
+const AVAILABLE_BACKHAUL_TRUCKS = [
+  {
+    id: 'VR-8042',
+    carrier: 'Mahindra Logistics',
+    vehicle: 'Tata 407 (2.5T Cargo Box)',
+    returnRoute: 'Thane West Fleet Depot to Navi Mumbai',
+    availableAt: '09:30 AM',
+    capacity: '2.5T'
+  },
+  {
+    id: 'VR-9104',
+    carrier: 'Rivigo Freight',
+    vehicle: 'Eicher 11.10 (6.0T High Deck)',
+    returnRoute: 'Bhiwandi Warehousing Gateway to Mumbai',
+    availableAt: '01:15 PM',
+    capacity: '6.0T'
+  },
+  {
+    id: 'VR-4210',
+    carrier: 'BlueDart EcoBackhaul',
+    vehicle: 'Ashok Leyland Boss (4.5T EV Container)',
+    returnRoute: 'Turbhe Vashi Hub to Taloja',
+    availableAt: '08:45 AM',
+    capacity: '4.5T'
+  }
+];
+
 function normalizeListing(listing) {
   return {
     ...listing,
@@ -81,6 +108,7 @@ export default function MarketplacePage() {
   const [filterType, setFilterType] = useState('all');
   const [maxRadius, setMaxRadius] = useState(25);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedTruckId, setSelectedTruckId] = useState('');
   const [claimedItem, setClaimedItem] = useState(null);
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
@@ -94,6 +122,7 @@ export default function MarketplacePage() {
   useEffect(() => {
     setInquiryMessage('');
     setInquirySent(false);
+    setSelectedTruckId('');
   }, [selectedProduct?.id]);
 
   // Fetch live database listings from Neon PostgreSQL
@@ -127,8 +156,10 @@ export default function MarketplacePage() {
   }, [dbListings, filterType, maxRadius]);
 
   const handleConfirmReserve = (item) => {
+    const selectedTruck = AVAILABLE_BACKHAUL_TRUCKS.find(truck => truck.id === selectedTruckId);
+    if (!selectedTruck) return;
     setSelectedProduct(null);
-    setClaimedItem(item);
+    setClaimedItem({ ...item, selectedTruck });
     setTimeout(() => {
       setClaimedItem(null);
     }, 3500);
@@ -255,7 +286,7 @@ export default function MarketplacePage() {
           <div>
             <div style={{ fontWeight: '700', fontSize: '1rem' }}>Pickup Order Reserved!</div>
             <div style={{ fontSize: '0.85rem', color: '#A7F3D0' }}>
-              Backhaul truck assigned to {claimedItem.location} for {claimedItem.title}.
+              {claimedItem.selectedTruck.vehicle} ({claimedItem.selectedTruck.id}) assigned to {claimedItem.location} for {claimedItem.title}.
             </div>
           </div>
         </div>
@@ -533,12 +564,52 @@ export default function MarketplacePage() {
                 )}
               </div>
 
+              <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', padding: '16px', borderRadius: '10px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#14532D', margin: '0 0 5px', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                  <Truck size={17} /> Available empty-return trucks
+                </h4>
+                <p style={{ fontSize: '0.82rem', color: '#166534', margin: '0 0 12px' }}>
+                  Select a truck returning empty from a retail delivery for this pickup.
+                </p>
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {AVAILABLE_BACKHAUL_TRUCKS.map(truck => {
+                    const isSelected = selectedTruckId === truck.id;
+                    return (
+                      <button
+                        key={truck.id}
+                        type="button"
+                        onClick={() => setSelectedTruckId(truck.id)}
+                        style={{
+                          textAlign: 'left',
+                          padding: '12px',
+                          borderRadius: '8px',
+                          border: isSelected ? '2px solid #059669' : '1px solid #D1FAE5',
+                          background: isSelected ? '#DCFCE7' : 'white',
+                          cursor: 'pointer',
+                          color: '#0F172A'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                          <strong>{truck.vehicle}</strong>
+                          <span style={{ color: '#047857', fontWeight: '700', fontSize: '0.8rem' }}>{truck.id} · {truck.capacity}</span>
+                        </div>
+                        <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '4px' }}>
+                          {truck.carrier} · {truck.returnRoute} · Empty at {truck.availableAt}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Modal Action Buttons */}
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
                 <button
                   className="btn-primary"
-                  style={{ flex: 1, padding: '12px', justifyContent: 'center', fontSize: '1rem' }}
                   onClick={() => handleConfirmReserve(selectedProduct)}
+                  disabled={!selectedTruckId}
+                  title={!selectedTruckId ? 'Select an empty-return truck first' : 'Reserve this material and truck'}
+                  style={{ flex: 1, padding: '12px', justifyContent: 'center', fontSize: '1rem', opacity: selectedTruckId ? 1 : 0.55, cursor: selectedTruckId ? 'pointer' : 'not-allowed' }}
                 >
                   <Truck size={18} /> Reserve Lot & Dispatch Pickup
                 </button>
