@@ -179,6 +179,21 @@ h1, h2, h3, h4, h5, h6 {
   padding: 32px 24px;
 }
 
+.marketplace-header-copy {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .marketplace-header {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+
+  .marketplace-radius-controls {
+    width: 100%;
+  }
+}
+
 /* Hero Section */
 .hero-section {
   background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
