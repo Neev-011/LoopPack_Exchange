@@ -1,5 +1,25 @@
 [
   {
+    "id": 1789211494338,
+    "title": "lskrgnsrlkgn",
+    "materialType": "cardboard",
+    "quantity": 300,
+    "unit": "boxes",
+    "grade": "A",
+    "location": "Warehouse District, Sector 4",
+    "lat": 19.08,
+    "lon": 72.88,
+    "distanceKm": 5,
+    "price": 12,
+    "isFree": false,
+    "description": "Verified Grade A cardboard circular scrap lot ready for B2B pickup.",
+    "createdBy": "kashyap",
+    "companyName": "kashyap",
+    "ownerRole": "Packaging Generator / Supplier",
+    "image": "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80",
+    "createdAt": "2026-09-12T11:11:34.338Z"
+  },
+  {
     "id": 1789209062043,
     "title": "100x Corrugated Cardboard (Double-Wall)",
     "materialType": "cardboard",
