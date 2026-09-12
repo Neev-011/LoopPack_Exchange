@@ -568,8 +568,7 @@ export default function AuthPage({ setActiveTab }) {
                     outline: 'none'
                   }}
                 >
-                  <option value="supplier">Packaging Supplier</option>
-                  <option value="buyer">Buyer / Recycler</option>
+                  <option value="supplier">Buyer / Seller Organization</option>
                   <option value="logistics">Logistics Partner</option>
                 </select>
               </div>

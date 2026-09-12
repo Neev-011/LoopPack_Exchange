@@ -8,41 +8,53 @@ function userParams(user) {
   return new URLSearchParams({
     userId: user.id,
     username: user.username,
-    companyName: user.companyName
+    companyName: user.companyName,
+    userRole: user.role
   });
 }
 
 function userBody(user) {
-  return { userId: user.id, username: user.username, companyName: user.companyName };
+  return { userId: user.id, username: user.username, companyName: user.companyName, role: user.role };
 }
 
-export default function AccountHubPage({ view = 'materials' }) {
+export default function AccountHubPage({ view = 'materials', setActiveTab }) {
   const { currentUser } = useAuth();
   const [inquiries, setInquiries] = useState([]);
   const [listings, setListings] = useState([]);
   const [completedSales, setCompletedSales] = useState([]);
+  const [purchases, setPurchases] = useState([]);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [messages, setMessages] = useState([]);
   const [message, setMessage] = useState('');
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
-  const isSeller = currentUser?.role !== 'buyer';
+  const isSeller = ['supplier', 'buyer'].includes(currentUser?.role);
 
   const load = async () => {
     if (!currentUser) return;
-    const role = view === 'inquiries' ? 'buyer' : 'seller';
-    const inquiryResponse = await fetch(`${API_BASE_URL}/inquiries?${userParams(currentUser)}&role=${role}`);
-    const inquiryData = await inquiryResponse.json();
-    if (!inquiryResponse.ok) throw new Error(inquiryData.error || 'Could not load inquiries.');
-    setInquiries(inquiryData.data || []);
-    if (view === 'materials' && isSeller) {
-      const listingResponse = await fetch(`${API_BASE_URL}/listings?owner=${encodeURIComponent(currentUser.username)}`);
-      const listingData = await listingResponse.json();
-      setListings(listingData.data || []);
+    if (view === 'materials' || view === 'inquiries') {
+      const role = view === 'inquiries' ? 'buyer' : 'seller';
+      const inquiryResponse = await fetch(`${API_BASE_URL}/inquiries?${userParams(currentUser)}&role=${role}`);
+      const inquiryData = await inquiryResponse.json();
+      if (!inquiryResponse.ok) throw new Error(inquiryData.error || 'Could not load inquiries.');
+      setInquiries(inquiryData.data || []);
+    }
+    if (view === 'sales') {
       const salesResponse = await fetch(`${API_BASE_URL}/orders?username=${encodeURIComponent(currentUser.username)}`);
       const salesData = await salesResponse.json();
       if (!salesResponse.ok) throw new Error(salesData.error || 'Could not load completed sales.');
       setCompletedSales(salesData.data || []);
+    }
+    if (view === 'materials' && isSeller) {
+      const listingResponse = await fetch(`${API_BASE_URL}/listings?owner=${encodeURIComponent(currentUser.username)}`);
+      const listingData = await listingResponse.json();
+      setListings(listingData.data || []);
+    }
+    if (view === 'purchases') {
+      const purchasesResponse = await fetch(`${API_BASE_URL}/orders?username=${encodeURIComponent(currentUser.username)}&role=buyer`);
+      const purchasesData = await purchasesResponse.json();
+      if (!purchasesResponse.ok) throw new Error(purchasesData.error || 'Could not load purchases.');
+      setPurchases(purchasesData.data || []);
     }
   };
 
@@ -111,7 +123,7 @@ export default function AccountHubPage({ view = 'materials' }) {
       const response = await fetch(`${API_BASE_URL}/listings/${editing.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...editing, quantity: cleanQty, price: cleanPrice, username: currentUser.username })
+        body: JSON.stringify({ ...editing, quantity: cleanQty, price: cleanPrice, username: currentUser.username, role: currentUser.role })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not update listing.');
@@ -128,7 +140,7 @@ export default function AccountHubPage({ view = 'materials' }) {
       const response = await fetch(`${API_BASE_URL}/listings/${listing.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: currentUser.username })
+        body: JSON.stringify({ username: currentUser.username, role: currentUser.role })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Could not delete listing.');
@@ -144,15 +156,112 @@ export default function AccountHubPage({ view = 'materials' }) {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
-      <h2 style={{ color: '#0F172A', marginBottom: 6 }}>{view === 'materials' ? 'My Materials' : 'My Inquiries'}</h2>
+      {/* Account Hub Navigation Tabs */}
+      {setActiveTab && (
+        <div className="responsive-tabs-bar" style={{ gap: '10px', marginBottom: '24px' }}>
+          <button
+            onClick={() => setActiveTab('account')}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '10px',
+              border: view === 'materials' ? '1px solid #10B981' : '1px solid #CBD5E1',
+              background: view === 'materials' ? '#ECFDF5' : 'white',
+              color: view === 'materials' ? '#047857' : '#475569',
+              fontWeight: '700',
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            📦 My Listed Materials
+          </button>
+          <button
+            onClick={() => setActiveTab('purchases')}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '10px',
+              border: view === 'purchases' ? '1px solid #10B981' : '1px solid #CBD5E1',
+              background: view === 'purchases' ? '#ECFDF5' : 'white',
+              color: view === 'purchases' ? '#047857' : '#475569',
+              fontWeight: '700',
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            🛒 My Purchases
+          </button>
+          <button
+            onClick={() => setActiveTab('sales')}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '10px',
+              border: view === 'sales' ? '1px solid #10B981' : '1px solid #CBD5E1',
+              background: view === 'sales' ? '#ECFDF5' : 'white',
+              color: view === 'sales' ? '#047857' : '#475569',
+              fontWeight: '700',
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            💰 Sales History
+          </button>
+          <button
+            onClick={() => setActiveTab('inquiries')}
+            style={{
+              padding: '10px 18px',
+              borderRadius: '10px',
+              border: view === 'inquiries' ? '1px solid #10B981' : '1px solid #CBD5E1',
+              background: view === 'inquiries' ? '#ECFDF5' : 'white',
+              color: view === 'inquiries' ? '#047857' : '#475569',
+              fontWeight: '700',
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            💬 B2B Inquiries & Chat
+          </button>
+        </div>
+      )}
+      <h2 style={{ color: '#0F172A', marginBottom: 6 }}>
+        {view === 'materials' ? 'My Materials' : view === 'purchases' ? 'My Purchases' : view === 'sales' ? 'Sales History' : 'My Inquiries'}
+      </h2>
       <p style={{ color: '#64748B', marginBottom: 24 }}>
         {view === 'materials'
           ? 'Manage your posted materials and inquiries received from buyers.'
-          : 'Track inquiries you have sent to other sellers and continue conversations.'}
+          : view === 'purchases'
+            ? 'Review the packaging materials you purchased and their delivery details.'
+            : view === 'sales'
+              ? 'Review completed buyer orders and the details of materials sold from your listings.'
+            : 'Track inquiries you have sent to other sellers and continue conversations.'}
       </p>
       {error && <div style={{ background: '#FEF2F2', color: '#991B1B', padding: 12, borderRadius: 8, marginBottom: 16 }}>{error}</div>}
+      {view === 'purchases' && (
+        <section style={{ background: 'white', padding: 24, borderRadius: 12, border: '1px solid #E2E8F0' }}>
+          <h3>Purchase history</h3>
+          {purchases.length === 0 && <p style={{ color: '#64748B' }}>You have no completed purchases yet. Browse the marketplace to find packaging materials.</p>}
+          {purchases.map(order => (
+            <article key={order.id} style={{ border: '1px solid #D1FAE5', background: '#F0FDF4', borderRadius: 10, padding: 18, marginTop: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <h4 style={{ margin: 0, color: '#0F172A', fontSize: '1.05rem' }}>{order.listingTitle}</h4>
+                  <small style={{ color: '#047857' }}>Order {order.id}</small>
+                </div>
+                <span style={{ color: '#047857', background: '#DCFCE7', borderRadius: 999, padding: '5px 10px', fontSize: 12, fontWeight: 800 }}>
+                  {order.status === 'completed' ? 'Completed' : order.status}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10, marginTop: 16, color: '#334155', fontSize: 13 }}>
+                <div><strong>Quantity</strong><br />{order.quantity} {order.unit || 'units'}</div>
+                <div><strong>Total paid</strong><br />₹{Number(order.totalPrice || 0).toLocaleString()}</div>
+                <div><strong>Seller</strong><br />@{order.sellerUsername}</div>
+                <div><strong>Payment method</strong><br />{order.paymentMethod}</div>
+                <div><strong>Delivery destination</strong><br />{order.destination}</div>
+                <div><strong>Purchased</strong><br />{order.createdAt ? new Date(order.createdAt).toLocaleString() : 'Not available'}</div>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
       {view === 'materials' && isSeller && (
-        <>
         <section style={{ background: 'white', padding: 24, borderRadius: 12, marginBottom: 20, border: '1px solid #E2E8F0' }}>
           <h3>My posted materials</h3>
           {listings.length === 0 && <p style={{ color: '#64748B' }}>No listings are attributed to this account yet. New posts will be linked to your account.</p>}
@@ -166,29 +275,32 @@ export default function AccountHubPage({ view = 'materials' }) {
             </div>
           ))}
         </section>
-        <section style={{ background: 'white', padding: 24, borderRadius: 12, marginBottom: 20, border: '1px solid #A7F3D0' }}>
+      )}
+
+      {view === 'sales' && (
+        <section style={{ background: 'white', padding: 24, borderRadius: 12, border: '1px solid #A7F3D0' }}>
           <h3>Completed sales</h3>
           {completedSales.length === 0 && <p style={{ color: '#64748B' }}>No completed sales yet.</p>}
           {completedSales.map(order => (
-            <div key={order.id} style={{ border: '1px solid #D1FAE5', background: '#F0FDF4', borderRadius: 10, padding: 16, marginTop: 12 }}>
-              <strong>{order.listingTitle}</strong>
-              <p style={{ margin: '8px 0', color: '#334155' }}>
-                Sold to <strong>{order.buyerCompany}</strong> (@{order.buyerUsername}) · {order.quantity} {order.unit}
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, color: '#475569', fontSize: 13 }}>
-                <div><strong>Buyer email:</strong> {order.buyerEmail}</div>
-                <div><strong>Total:</strong> ₹{order.totalPrice.toLocaleString()}</div>
-                <div><strong>Payment:</strong> {order.paymentMethod}</div>
-                <div><strong>Destination:</strong> {order.destination}</div>
-                <div><strong>Completed:</strong> {new Date(order.createdAt).toLocaleString()}</div>
+            <article key={order.id} style={{ border: '1px solid #D1FAE5', background: '#F0FDF4', borderRadius: 10, padding: 16, marginTop: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div><strong>{order.listingTitle}</strong><div style={{ color: '#047857', fontSize: 12 }}>Order {order.id}</div></div>
+                <span style={{ color: '#047857', background: '#DCFCE7', borderRadius: 999, padding: '4px 9px', fontSize: 12, fontWeight: 800 }}>{order.status}</span>
               </div>
-            </div>
+              <p style={{ margin: '8px 0', color: '#334155' }}>Sold to <strong>{order.buyerCompany}</strong> (@{order.buyerUsername}) · {order.quantity} {order.unit}</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, color: '#475569', fontSize: 13 }}>
+                <div><strong>Buyer email:</strong><br />{order.buyerEmail}</div>
+                <div><strong>Total:</strong><br />₹{Number(order.totalPrice || 0).toLocaleString()}</div>
+                <div><strong>Payment:</strong><br />{order.paymentMethod}</div>
+                <div><strong>Delivery destination:</strong><br />{order.destination}</div>
+                <div><strong>Completed:</strong><br />{order.createdAt ? new Date(order.createdAt).toLocaleString() : 'Not available'}</div>
+              </div>
+            </article>
           ))}
         </section>
-        </>
       )}
 
-      <section style={{ background: 'white', padding: 24, borderRadius: 12, border: '1px solid #E2E8F0' }}>
+      {(view === 'materials' || view === 'inquiries') && <section style={{ background: 'white', padding: 24, borderRadius: 12, border: '1px solid #E2E8F0' }}>
         <h3>{view === 'materials' ? 'Inquiries received on my materials' : 'Inquiries sent to sellers'}</h3>
         {inquiries.length === 0 && <p style={{ color: '#64748B' }}>No inquiries yet.</p>}
         {inquiries.map(item => (
@@ -207,7 +319,7 @@ export default function AccountHubPage({ view = 'materials' }) {
             </div>
           </div>
         ))}
-      </section>
+      </section>}
 
       {editing && (
         <div style={modalStyle}>
