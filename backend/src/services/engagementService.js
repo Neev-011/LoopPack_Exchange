@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { getNeonClient } from '../config/neonDb.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,6 +17,33 @@ function readJson(file) {
 function writeJson(file, data) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+
+  if (file === INQUIRIES_FILE) {
+    const client = getNeonClient();
+    if (client) {
+      (async () => {
+        try {
+          for (const item of data) {
+            await client`
+              INSERT INTO inquiries (
+                id, listing_id, listing_title, buyer_id, buyer_username, buyer_company, seller_username, message, quantity, status, created_at
+              ) VALUES (
+                ${item.id}, ${String(item.listingId)}, ${item.listingTitle || ''}, ${item.buyerId},
+                ${item.buyerUsername}, ${item.buyerCompanyName}, ${item.sellerUsername},
+                ${item.message}, ${item.quantity}, ${item.status || 'new'}, ${item.createdAt || new Date().toISOString()}
+              )
+              ON CONFLICT (id) DO UPDATE SET
+                status = EXCLUDED.status,
+                message = EXCLUDED.message,
+                quantity = EXCLUDED.quantity
+            `;
+          }
+        } catch (err) {
+          console.error('[EngagementService Neon Sync Error]:', err.message);
+        }
+      })();
+    }
+  }
 }
 
 function requireUser(user) {
