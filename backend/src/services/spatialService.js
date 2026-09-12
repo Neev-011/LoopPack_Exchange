@@ -17,6 +17,7 @@ const CITY_COORDINATE_LOOKUP = {
   'chakan': { lat: 18.7600, lon: 73.8590, name: 'Chakan Auto & Freight Corridor' },
   'nashik': { lat: 19.9975, lon: 73.7898, name: 'Nashik MIDC' },
   'ahmedabad': { lat: 23.0225, lon: 72.5714, name: 'Ahmedabad GIDC' },
+  'morbi': { lat: 22.8173, lon: 70.8377, name: 'Morbi Industrial Area' },
   'vadodara': { lat: 22.3072, lon: 73.1812, name: 'Vadodara Industrial Corridor' },
   'surat': { lat: 21.1702, lon: 72.8311, name: 'Surat Textile & Freight Park' },
   'vapi': { lat: 20.3717, lon: 72.9044, name: 'Vapi GIDC Estate' },
@@ -54,9 +55,9 @@ export function calculateDistanceKm(lat1, lon1, lat2, lon2) {
  * @param {string} locationName 
  * @returns {Promise<{lat: number, lon: number, name: string}>}
  */
-export async function geocodeLocation(locationName) {
+export async function geocodeLocation(locationName, { allowSyntheticFallback = true } = {}) {
   if (!locationName || typeof locationName !== 'string') {
-    return { lat: 19.0760, lon: 72.8777, name: 'Central Mumbai Depot' };
+    return allowSyntheticFallback ? { lat: 19.0760, lon: 72.8777, name: 'Central Mumbai Depot' } : null;
   }
 
   const query = locationName.trim().toLowerCase();
@@ -86,16 +87,23 @@ export async function geocodeLocation(locationName) {
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
+        const lat = parseFloat(data[0].lat);
+        const lon = parseFloat(data[0].lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+          return null;
+        }
         return {
-          lat: parseFloat(data[0].lat),
-          lon: parseFloat(data[0].lon),
+          lat,
+          lon,
           name: data[0].display_name.split(',')[0] || locationName
         };
       }
     }
   } catch (err) {
-    console.warn(`[Geocoding] Nominatim lookup for "${locationName}" timed out, using fallback math:`, err.message);
+    console.warn(`[Geocoding] Nominatim lookup for "${locationName}" failed:`, err.message);
   }
+
+  if (!allowSyntheticFallback) return null;
 
   // 3. Deterministic spatial offset fallback based on location string hash
   let hash = 0;

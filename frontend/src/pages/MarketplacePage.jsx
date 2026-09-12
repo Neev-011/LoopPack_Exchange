@@ -9,7 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { calculateHaversineDistance } from '../utils/spatialMath';
 import LocationPicker from '../components/common/LocationPicker';
 import RouteMap from '../components/common/RouteMap';
-import { calculateLogisticsEstimate, rankLogisticsVehicles } from '../services/logisticsMatchingService';
+import { materialWeightTons } from '../services/logisticsMatchingService';
 import AddressForm from '../components/common/AddressForm';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
@@ -146,6 +146,7 @@ export default function MarketplacePage() {
   const [maxRadius, setMaxRadius] = useState(25);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [logisticsVehicles, setLogisticsVehicles] = useState([]);
+  const [matchedLogisticsVehicles, setMatchedLogisticsVehicles] = useState([]);
   const [claimedItem, setClaimedItem] = useState(null);
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
@@ -156,6 +157,7 @@ export default function MarketplacePage() {
   const [orderError, setOrderError] = useState('');
   const [ordering, setOrdering] = useState(false);
   const [transportSearchState, setTransportSearchState] = useState('idle');
+  const [transportSearchError, setTransportSearchError] = useState('');
   const [deviceLocation, setDeviceLocation] = useState(null);
   const [locationStatus, setLocationStatus] = useState('idle');
   const [nearbyLogistics, setNearbyLogistics] = useState([]);
@@ -171,6 +173,8 @@ export default function MarketplacePage() {
     setInquirySent(false);
     setOrderError('');
     setTransportSearchState('idle');
+    setTransportSearchError('');
+    setMatchedLogisticsVehicles([]);
     setOrderDetails({
       quantity: selectedProduct?.quantity || '',
       destination: '',
@@ -202,32 +206,16 @@ export default function MarketplacePage() {
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
     );
   };
-  const rankedLogisticsVehicles = useMemo(() => {
-    if (!selectedProduct) return [];
-    return rankLogisticsVehicles({
-      vehicles: logisticsVehicles,
-      sellerLocation: selectedProduct.location,
-      buyerDestination: orderDetails.destination,
-      quantity: orderDetails.quantity || selectedProduct.quantity,
-      unit: selectedProduct.unit,
-      requiredDate: orderDetails.pickupDate,
-      requiredTime: orderDetails.pickupTime
-    });
-  }, [selectedProduct, logisticsVehicles, orderDetails.quantity, orderDetails.destination, orderDetails.pickupDate, orderDetails.pickupTime]);
-
   const selectedLogisticsEstimate = useMemo(() => {
-    const vehicle = rankedLogisticsVehicles[0];
-    if (!vehicle || !selectedProduct || !orderDetails.destination.trim()) return null;
-    try {
-      return calculateLogisticsEstimate({
-        sellerLocation: selectedProduct.location,
-        buyerDestination: orderDetails.destination,
-        vehicle
-      });
-    } catch {
-      return null;
-    }
-  }, [rankedLogisticsVehicles, selectedProduct, orderDetails.destination]);
+    const candidate = matchedLogisticsVehicles[0];
+    if (!candidate) return null;
+    return {
+      distanceKm: candidate.combinedDistanceKm ?? candidate.baseDistanceKm ?? null,
+      transportCost: candidate.estimatedCost ?? null,
+      detourKm: candidate.detourKm ?? 0,
+      detourPercent: candidate.detourPercent ?? 0
+    };
+  }, [matchedLogisticsVehicles]);
 
   useEffect(() => {
     if (!selectedProduct) return undefined;
@@ -328,7 +316,7 @@ export default function MarketplacePage() {
       setOrderError('Only Buyer / Seller Organization accounts can purchase materials.');
       return;
     }
-    const selectedTruck = rankedLogisticsVehicles[0];
+    const selectedTruck = matchedLogisticsVehicles[0];
     if (!selectedTruck) {
       setOrderError('No compatible transportation is available for this shipment.');
       return;
@@ -363,13 +351,14 @@ export default function MarketplacePage() {
             ...selectedTruck,
             estimate: selectedLogisticsEstimate
           },
-          logisticsCandidates: rankedLogisticsVehicles.map(vehicle => ({
-            ...vehicle,
-            estimate: calculateLogisticsEstimate({
-              sellerLocation: selectedProduct.location,
-              buyerDestination: orderDetails.destination,
-              vehicle
-            })
+          logisticsCandidates: matchedLogisticsVehicles.map(candidate => ({
+            ...candidate,
+            estimate: {
+              distanceKm: candidate.combinedDistanceKm ?? candidate.baseDistanceKm,
+              transportCost: candidate.estimatedCost,
+              detourKm: candidate.detourKm,
+              detourPercent: candidate.detourPercent
+            }
           }))
         })
       });
@@ -387,14 +376,59 @@ export default function MarketplacePage() {
     }
   };
 
-  const handleFindTransportation = () => {
-    if (rankedLogisticsVehicles.length === 0) {
-      setTransportSearchState('unavailable');
-      setOrderError('No compatible transportation is available for this shipment.');
+  const handleFindTransportation = async () => {
+    if (!selectedProduct || !orderDetails.destination.trim() || !orderDetails.quantity) return;
+    if (!buyerLocationSet || !buyerCoordinates) {
+      setTransportSearchError('Set and confirm your delivery location before finding transportation.');
       return;
     }
+    if (!Number.isFinite(Number(selectedProduct.lat)) || !Number.isFinite(Number(selectedProduct.lon))) {
+      setTransportSearchError('The seller pickup coordinates are unavailable for route matching.');
+      setTransportSearchState('error');
+      return;
+    }
+    setTransportSearchState('loading');
+    setTransportSearchError('');
     setOrderError('');
-    setTransportSearchState('sent');
+    try {
+      const response = await fetch(`${API_BASE_URL}/trucks/match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vehicles: logisticsVehicles.map(vehicle => ({
+            ...vehicle,
+            origin: vehicle.originCoordinates || (
+              Number.isFinite(Number(vehicle.lat)) && Number.isFinite(Number(vehicle.lon))
+                ? { lat: Number(vehicle.lat), lon: Number(vehicle.lon) }
+                : null
+            ),
+            destination: vehicle.destinationCoordinates
+          })),
+          shipment: {
+            pickupCity: selectedProduct.location,
+            deliveryCity: orderDetails.deliveryAddress.city || orderDetails.destination,
+            pickup: { lat: Number(selectedProduct.lat), lon: Number(selectedProduct.lon) },
+            delivery: { lat: Number(buyerCoordinates.lat), lon: Number(buyerCoordinates.lon) },
+            requiredCapacityTons: materialWeightTons(
+              Number(orderDetails.quantity),
+              selectedProduct.unit
+            ),
+            requestedDate: orderDetails.pickupDate,
+            requestedTime: orderDetails.pickupTime
+          }
+        })
+      });
+      if (!response.ok) throw new Error(`Matching request failed with status ${response.status}.`);
+      const result = await response.json();
+      const candidates = Array.isArray(result.data) ? result.data : [];
+      setMatchedLogisticsVehicles(candidates);
+      setTransportSearchState(candidates.length ? 'success' : 'no-match');
+    } catch (error) {
+      console.error('[Marketplace logistics matching]', error);
+      setMatchedLogisticsVehicles([]);
+      setTransportSearchState('error');
+      setTransportSearchError('We could not calculate available transport options right now. Please try again.');
+    }
   };
 
   const sendInquiry = async () => {
@@ -884,28 +918,6 @@ export default function MarketplacePage() {
                 );
               })()}
 
-              {rankedLogisticsVehicles[0] && selectedLogisticsEstimate && (() => {
-                const carbon = calculateAvoidedCarbon(
-                  selectedProduct.materialType || 'cardboard',
-                  Number(orderDetails.quantity || selectedProduct.quantity || 100),
-                  selectedLogisticsEstimate.distanceKm,
-                  selectedProduct.grade || 'A'
-                );
-                const selectedVehicle = rankedLogisticsVehicles[0];
-                return (
-                  <div style={{ background: '#F8FAFC', border: '1px solid #CBD5E1', padding: '10px 12px', borderRadius: '9px', marginBottom: '14px', color: '#334155' }}>
-                    <div style={{ fontWeight: '800', color: '#0F172A', marginBottom: '8px' }}>Selected Logistics</div>
-                    <div style={{ display: 'grid', gap: '4px', fontSize: '0.86rem' }}>
-                      <div>Vehicle: <strong>{selectedVehicle?.truckName}</strong></div>
-                      <div>Route: <strong>{selectedVehicle?.originCity} → {selectedVehicle?.destinationCity}</strong></div>
-                      <div>Distance: <strong>{selectedLogisticsEstimate.distanceKm} km</strong></div>
-                      <div>Estimated Transport Cost: <strong>₹{selectedLogisticsEstimate.transportCost.toLocaleString('en-IN')}</strong></div>
-                      <div>Estimated Transport Emissions: <strong>{carbon.eTransport} kg CO₂e</strong></div>
-                    </div>
-                  </div>
-                );
-              })()}
-
               {/* Seller & Listing Origin Verification Box */}
               <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '16px', borderRadius: '10px', marginBottom: '20px' }}>
                 <h4 style={{ fontSize: '0.9rem', color: '#0F172A', fontWeight: '800', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1022,18 +1034,46 @@ export default function MarketplacePage() {
                   type="button"
                   className="btn-secondary"
                   onClick={handleFindTransportation}
-                  disabled={!orderDetails.destination.trim() || !orderDetails.quantity || transportSearchState === 'sent'}
+                  disabled={!orderDetails.destination.trim() || !orderDetails.quantity || transportSearchState === 'loading'}
                   style={{ width: '100%', justifyContent: 'center', padding: '10px' }}
                 >
-                  <Truck size={16} /> {transportSearchState === 'sent' ? 'Transportation Found' : 'Find Transportation'}
+                  <Truck size={16} /> {transportSearchState === 'loading' ? 'Finding transportation...' : 'Find Transportation'}
                 </button>
-                <div style={{ marginTop: '8px', fontSize: '0.78rem', color: transportSearchState === 'unavailable' ? '#92400E' : '#166534' }}>
-                  {transportSearchState === 'sent' && rankedLogisticsVehicles[0]
-                    ? `Best match: ${rankedLogisticsVehicles[0].companyName || 'available logistics partner'} · ${rankedLogisticsVehicles[0].truckName}. The request will be sent when you confirm the purchase.`
-                    : transportSearchState === 'unavailable'
-                      ? 'No compatible transportation is available for this shipment.'
-                      : 'We will contact the best compatible provider based on route, capacity, date, time, and cost.'}
-                </div>
+                {transportSearchState === 'error' && <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#991B1B' }}>{transportSearchError}</div>}
+                {transportSearchState === 'no-match' && (
+                  <div style={{ marginTop: '8px', fontSize: '0.78rem', color: '#92400E' }}>
+                    <strong>No suitable transportation found</strong><br />
+                    No available vehicle currently matches this shipment&apos;s route, capacity, and schedule.
+                  </div>
+                )}
+                {transportSearchState === 'success' && (
+                  <div style={{ display: 'grid', gap: '8px', marginTop: '10px' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: '800', color: '#14532D' }}>Recommended Transportation</div>
+                    {matchedLogisticsVehicles.map((candidate, index) => (
+                      <div key={candidate.id || index} style={{ background: 'white', border: `1px solid ${index === 0 ? '#059669' : '#D1FAE5'}`, borderRadius: '8px', padding: '10px 12px', color: '#334155' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap' }}>
+                          <strong style={{ color: '#0F172A' }}>{candidate.truckName || candidate.vehicle?.truckName}</strong>
+                          <span style={{ color: '#047857', fontWeight: '800', fontSize: '0.75rem' }}>
+                            {index === 0 ? 'RECOMMENDED · ' : ''}{candidate.matchMode === 'DIRECT_MATCH' ? 'Direct Match' : 'On-Route Match'}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>
+                          {candidate.originCity} → {candidate.destinationCity}
+                        </div>
+                        {candidate.matchMode === 'ON_ROUTE_MATCH' && (
+                          <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '5px' }}>
+                            Base route: {candidate.baseDistanceKm} km · With shipment: {candidate.combinedDistanceKm} km · Detour: {candidate.detourKm} km ({candidate.detourPercent}%)
+                          </div>
+                        )}
+                        {candidate.estimatedCost !== null && candidate.estimatedCost !== undefined && (
+                          <div style={{ fontSize: '0.78rem', color: '#166534', marginTop: '5px' }}>
+                            Estimated transport: <strong>₹{Number(candidate.estimatedCost).toLocaleString('en-IN')}</strong>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Checkout and reservation */}
@@ -1078,7 +1118,7 @@ export default function MarketplacePage() {
                     <option>Pay on pickup</option>
                   </select>
                 </label>
-                <button className="btn-primary" type="submit" disabled={ordering || isOwnListing || transportSearchState !== 'sent'} style={{ width: '100%', justifyContent: 'center', marginTop: 14, opacity: transportSearchState === 'sent' ? 1 : 0.55 }}>
+                <button className="btn-primary" type="submit" disabled={ordering || isOwnListing || transportSearchState !== 'success'} style={{ width: '100%', justifyContent: 'center', marginTop: 14, opacity: transportSearchState === 'success' ? 1 : 0.55 }}>
                   <Check size={18} /> {ordering ? 'Processing purchase...' : 'Confirm Purchase'}
                 </button>
               </form>

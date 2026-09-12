@@ -148,11 +148,26 @@ async function main() {
       created_by VARCHAR(100) NOT NULL,
       company_name VARCHAR(255) NOT NULL,
       company_email VARCHAR(255),
+      lat NUMERIC,
+      lon NUMERIC,
+      location_updated_at TIMESTAMP WITH TIME ZONE,
+      origin_latitude NUMERIC,
+      origin_longitude NUMERIC,
+      destination_latitude NUMERIC,
+      destination_longitude NUMERIC,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )
   `;
   await sql`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS pickup_address JSONB`;
   await sql`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS delivery_address JSONB`;
+  await sql`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS origin_latitude NUMERIC`;
+  await sql`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS origin_longitude NUMERIC`;
+  await sql`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS destination_latitude NUMERIC`;
+  await sql`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS destination_longitude NUMERIC`;
+  await sql`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS lat NUMERIC`;
+  await sql`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS lon NUMERIC`;
+  await sql`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS location_updated_at TIMESTAMP WITH TIME ZONE`;
+  await sql`UPDATE trucks SET origin_latitude = lat, origin_longitude = lon WHERE origin_latitude IS NULL AND lat IS NOT NULL AND lon IS NOT NULL`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS users (

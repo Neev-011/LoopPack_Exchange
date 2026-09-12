@@ -104,5 +104,18 @@
     "securityQuestion": "What is your company's founding hub city?",
     "securityAnswer": "gondal",
     "createdAt": "2026-09-12T16:26:34.404Z"
+  },
+  {
+    "id": "usr_1789243624455",
+    "username": "nn",
+    "companyName": "nn",
+    "email": "nn@dau.ac.in",
+    "password": "nn@12345",
+    "role": "supplier",
+    "roleLabel": "Buyer / Seller Organization",
+    "industry": "Logistics & Warehousing",
+    "securityQuestion": "What is your company's founding hub city?",
+    "securityAnswer": "nn",
+    "createdAt": "2026-09-12T20:07:04.455Z"
   }
 ]
