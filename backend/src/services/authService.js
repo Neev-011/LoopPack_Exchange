@@ -44,6 +44,12 @@ function sanitizeUser(user) {
   return safeUser;
 }
 
+function validatePassword(password) {
+  if (typeof password !== 'string' || password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password) || !/[^A-Za-z\d\s]/.test(password)) {
+    throw new Error('Password must be at least 8 characters and include at least 1 alphabet, 1 number, and 1 symbol.');
+  }
+}
+
 async function readUsers() {
   const client = getNeonClient();
   if (client) {
@@ -77,7 +83,8 @@ export async function getAllDemoUsers() {
 
 export async function checkUsername(username) {
   if (!username) return { exists: false };
-  const found = (await readUsers()).find(user => user.username.toLowerCase() === username.trim().toLowerCase());
+  const needle = username.trim().toLowerCase();
+  const found = (await readUsers()).find(user => user.username.toLowerCase() === needle || user.email.toLowerCase() === needle);
   return found ? { exists: true, userPreview: { username: found.username, companyName: found.companyName, role: found.role, roleLabel: found.roleLabel, securityQuestion: found.securityQuestion } } : { exists: false };
 }
 
@@ -92,6 +99,7 @@ export async function authenticateUser({ usernameOrEmail, password }) {
 
 export async function registerUser({ username, companyName, email, password, role = 'supplier', industry = 'Manufacturing & Logistics', securityQuestion = "What is your company's founding hub city?", securityAnswer = '' }) {
   if (!username || !companyName || !email || !password) throw new Error('Username, Company Name, Email, and Password are required.');
+  validatePassword(password);
   const cleanUsername = username.trim().toLowerCase().replace(/\s+/g, '_');
   const cleanEmail = email.trim().toLowerCase();
   const users = await readUsers();
@@ -107,6 +115,7 @@ export async function registerUser({ username, companyName, email, password, rol
 
 export async function resetPassword({ usernameOrEmail, securityAnswer, newPassword }) {
   if (!usernameOrEmail || !newPassword) throw new Error('Username/email and new password are required.');
+  validatePassword(newPassword);
   const needle = usernameOrEmail.trim().toLowerCase();
   const user = (await readUsers()).find(item => item.username.toLowerCase() === needle || item.email.toLowerCase() === needle);
   if (!user) throw new Error('No B2B account found with this username or corporate email.');
@@ -139,7 +148,7 @@ export async function updateUserProfile({ userId, companyName, email, industry }
 
 export async function changeUserPassword({ userId, currentPassword, newPassword }) {
   if (!userId || !currentPassword || !newPassword) throw new Error('Current password and new password are required.');
-  if (newPassword.length < 8) throw new Error('New password must be at least 8 characters.');
+  validatePassword(newPassword);
   const user = (await readUsers()).find(item => item.id === userId);
   if (!user) throw new Error('Account not found.');
   if (user.password !== currentPassword) throw new Error('Current password is incorrect.');
