@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../../data');
 const INQUIRIES_FILE = path.join(DATA_DIR, 'inquiries.json');
 const MESSAGES_FILE = path.join(DATA_DIR, 'messages.json');
+const LISTINGS_FILE = path.join(DATA_DIR, 'db.json');
 
 function localRead(file) {
   if (!fs.existsSync(file)) return [];
@@ -60,16 +61,46 @@ export async function createInquiry({ listing, buyer, message, quantity }) {
   return inquiry;
 }
 
+export async function deleteInquiriesForListing(listingId) {
+  const normalizedListingId = String(listingId);
+  const client = getNeonClient();
+  if (client) {
+    await client`DELETE FROM messages WHERE inquiry_id IN (SELECT id FROM inquiries WHERE listing_id = ${normalizedListingId})`;
+    await client`DELETE FROM inquiries WHERE listing_id = ${normalizedListingId}`;
+    await client`DELETE FROM sales_orders WHERE listing_id = ${normalizedListingId}`;
+    return;
+  }
+
+  const inquiries = localRead(INQUIRIES_FILE);
+  const deletedInquiryIds = new Set(
+    inquiries.filter(item => String(item.listingId) === normalizedListingId).map(item => item.id)
+  );
+  localWrite(INQUIRIES_FILE, inquiries.filter(item => String(item.listingId) !== normalizedListingId));
+  if (deletedInquiryIds.size) {
+    localWrite(MESSAGES_FILE, localRead(MESSAGES_FILE).filter(item => !deletedInquiryIds.has(item.inquiryId)));
+  }
+}
+
 export async function getInquiriesForUser(user, role) {
   requireUser(user);
   const client = getNeonClient();
   if (client) {
+    await client`DELETE FROM messages WHERE NOT EXISTS (SELECT 1 FROM inquiries WHERE inquiries.id = messages.inquiry_id)`;
+    await client`DELETE FROM inquiries WHERE NOT EXISTS (SELECT 1 FROM listings WHERE listings.id = inquiries.listing_id)`;
     const rows = role === 'seller'
-      ? await client`SELECT * FROM inquiries WHERE seller_username = ${user.username} ORDER BY created_at DESC`
-      : await client`SELECT * FROM inquiries WHERE buyer_username = ${user.username} ORDER BY created_at DESC`;
+      ? await client`SELECT inquiries.* FROM inquiries INNER JOIN listings ON listings.id = inquiries.listing_id WHERE inquiries.seller_username = ${user.username} ORDER BY inquiries.created_at DESC`
+      : await client`SELECT inquiries.* FROM inquiries INNER JOIN listings ON listings.id = inquiries.listing_id WHERE inquiries.buyer_username = ${user.username} ORDER BY inquiries.created_at DESC`;
     return rows.map(fromInquiry);
   }
-  return localRead(INQUIRIES_FILE).filter(item => role === 'seller' ? item.sellerUsername === user.username : item.buyerUsername === user.username);
+  const listings = new Set(localRead(LISTINGS_FILE).map(item => String(item.id)));
+  const inquiries = localRead(INQUIRIES_FILE);
+  const validInquiries = inquiries.filter(item => listings.has(String(item.listingId)));
+  if (validInquiries.length !== inquiries.length) {
+    const validInquiryIds = new Set(validInquiries.map(item => item.id));
+    localWrite(INQUIRIES_FILE, validInquiries);
+    localWrite(MESSAGES_FILE, localRead(MESSAGES_FILE).filter(item => validInquiryIds.has(item.inquiryId)));
+  }
+  return validInquiries.filter(item => role === 'seller' ? item.sellerUsername === user.username : item.buyerUsername === user.username);
 }
 
 export async function updateInquiryStatus(id, user, status) {

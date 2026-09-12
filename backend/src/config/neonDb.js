@@ -122,6 +122,21 @@ export async function initNeonTables() {
       )
     `;
 
+    // Remove legacy orphan rows before enforcing cascading ownership relationships.
+    await client`DELETE FROM messages WHERE NOT EXISTS (SELECT 1 FROM inquiries WHERE inquiries.id = messages.inquiry_id)`;
+    await client`DELETE FROM inquiries WHERE listing_id IS NULL OR NOT EXISTS (SELECT 1 FROM listings WHERE listings.id = inquiries.listing_id)`;
+    await client`ALTER TABLE inquiries ALTER COLUMN listing_id SET NOT NULL`;
+    try {
+      await client`ALTER TABLE inquiries ADD CONSTRAINT inquiries_listing_fk FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE`;
+    } catch (error) {
+      if (!/already exists/i.test(error.message)) throw error;
+    }
+    try {
+      await client`ALTER TABLE messages ADD CONSTRAINT messages_inquiry_fk FOREIGN KEY (inquiry_id) REFERENCES inquiries(id) ON DELETE CASCADE`;
+    } catch (error) {
+      if (!/already exists/i.test(error.message)) throw error;
+    }
+
     await client`
       CREATE TABLE IF NOT EXISTS sales_orders (
         id VARCHAR(80) PRIMARY KEY,
@@ -143,6 +158,12 @@ export async function initNeonTables() {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
+    await client`DELETE FROM sales_orders WHERE NOT EXISTS (SELECT 1 FROM listings WHERE listings.id = sales_orders.listing_id)`;
+    try {
+      await client`ALTER TABLE sales_orders ADD CONSTRAINT sales_orders_listing_fk FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE`;
+    } catch (error) {
+      if (!/already exists/i.test(error.message)) throw error;
+    }
 
     // 4. Users Table
     await client`
