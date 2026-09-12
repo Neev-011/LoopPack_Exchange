@@ -102,13 +102,57 @@ async function main() {
       unit_price NUMERIC DEFAULT 0,
       total_price NUMERIC DEFAULT 0,
       destination TEXT NOT NULL,
+      pickup_date VARCHAR(40),
+      pickup_time VARCHAR(20),
+      delivery_address JSONB,
       payment_method VARCHAR(80) NOT NULL,
-      status VARCHAR(40) DEFAULT 'completed',
+      status VARCHAR(40) DEFAULT 'pending',
+      logistics_status VARCHAR(40) DEFAULT 'pending',
+      logistics_vehicle JSONB,
+      logistics_candidates JSONB,
+      logistics_request_history JSONB DEFAULT '[]'::jsonb,
+      transport_distance_km NUMERIC,
+      transport_emissions_kg NUMERIC,
+      net_co2e_avoided NUMERIC,
       listing_snapshot JSONB NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )
   `;
   await sql`ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE`;
+  await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS pickup_date VARCHAR(40)`;
+  await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS pickup_time VARCHAR(20)`;
+  await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS delivery_address JSONB`;
+  await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS logistics_status VARCHAR(40) DEFAULT 'pending'`;
+  await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS logistics_vehicle JSONB`;
+  await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS logistics_candidates JSONB`;
+  await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS logistics_request_history JSONB DEFAULT '[]'::jsonb`;
+  await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS transport_distance_km NUMERIC`;
+  await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS transport_emissions_kg NUMERIC`;
+  await sql`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS net_co2e_avoided NUMERIC`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS trucks (
+      id VARCHAR(64) PRIMARY KEY,
+      truck_name VARCHAR(255) NOT NULL,
+      vehicle_reg VARCHAR(100) NOT NULL,
+      capacity_tons NUMERIC NOT NULL,
+      origin_city VARCHAR(255) NOT NULL,
+      destination_city VARCHAR(255) NOT NULL,
+      pickup_address JSONB,
+      delivery_address JSONB,
+      available_date VARCHAR(100),
+      available_time VARCHAR(50),
+      rate_per_km NUMERIC DEFAULT 0,
+      driver_name VARCHAR(100),
+      driver_phone VARCHAR(50),
+      status VARCHAR(50) DEFAULT 'available',
+      created_by VARCHAR(100) NOT NULL,
+      company_name VARCHAR(255) NOT NULL,
+      company_email VARCHAR(255),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    )
+  `;
+  await sql`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS pickup_address JSONB`;
+  await sql`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS delivery_address JSONB`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS users (

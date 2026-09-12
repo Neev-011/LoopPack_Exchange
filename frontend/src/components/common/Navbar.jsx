@@ -283,7 +283,7 @@ export default function Navbar({ activeTab, setActiveTab }) {
                     <Route size={18} color="#F59E0B" />
                     <div>
                       <div>Eco-Logistics Carrier Hub</div>
-                      <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Fleet dispatch & VRP optimizer</div>
+                      <div style={{ fontSize: '0.72rem', color: '#94A3B8', fontWeight: '400' }}>Available vehicles & routes</div>
                     </div>
                   </button>
                 )}

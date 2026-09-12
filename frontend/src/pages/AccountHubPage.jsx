@@ -29,6 +29,12 @@ export default function AccountHubPage({ view = 'materials' }) {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
   const isSeller = ['supplier', 'buyer'].includes(currentUser?.role);
+  const orderStatusLabel = status => ({
+    pending: 'Request pending',
+    logistics_confirmed: 'Transport confirmed',
+    no_logistics_available: 'No logistics available',
+    logistics_rejected: 'Transport request rejected'
+  }[status] || status);
 
   const load = async () => {
     if (!currentUser) return;
@@ -181,7 +187,7 @@ export default function AccountHubPage({ view = 'materials' }) {
                   <small style={{ color: '#047857' }}>Order {order.id}</small>
                 </div>
                 <span style={{ color: '#047857', background: '#DCFCE7', borderRadius: 999, padding: '5px 10px', fontSize: 12, fontWeight: 800 }}>
-                  {order.status === 'completed' ? 'Completed' : order.status}
+                  {order.status === 'completed' ? 'Completed' : orderStatusLabel(order.status)}
                 </span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10, marginTop: 16, color: '#334155', fontSize: 13 }}>
@@ -190,6 +196,17 @@ export default function AccountHubPage({ view = 'materials' }) {
                 <div><strong>Seller</strong><br />@{order.sellerUsername}</div>
                 <div><strong>Payment method</strong><br />{order.paymentMethod}</div>
                 <div><strong>Delivery destination</strong><br />{order.destination}</div>
+                {order.logisticsVehicle && <div><strong>Selected logistics</strong><br />{order.logisticsVehicle.truckName} · {order.transportDistanceKm || order.logisticsVehicle.estimate?.distanceKm || 'Estimated'} km · {order.transportEmissionsKg || order.logisticsVehicle.estimate?.transportEmissionsKg || 0} kg CO₂e</div>}
+                {order.logisticsRequestHistory?.length > 0 && (
+                  <div>
+                    <strong>Transport request history</strong><br />
+                    {order.logisticsRequestHistory.map((attempt, index) => (
+                      <span key={`${attempt.vehicleId || 'vehicle'}-${index}`}>
+                        {index > 0 ? ' · ' : ''}{attempt.vehicleName || 'Vehicle'}: {String(attempt.status || '').toUpperCase()}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div><strong>Purchased</strong><br />{order.createdAt ? new Date(order.createdAt).toLocaleString() : 'Not available'}</div>
               </div>
             </article>

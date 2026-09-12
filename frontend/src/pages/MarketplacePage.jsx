@@ -5,8 +5,16 @@ import {
 } from 'lucide-react';
 import { calculateAvoidedCarbon } from '../utils/carbonEngine';
 import { useAuth } from '../context/AuthContext';
+import { calculateLogisticsEstimate, rankLogisticsVehicles } from '../services/logisticsMatchingService';
+import AddressForm from '../components/common/AddressForm';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
+
+function formatAddress(address) {
+  return [address?.streetArea, address?.landmark, address?.city, address?.state]
+    .filter(Boolean)
+    .join(', ');
+}
 
 const MOCK_FALLBACK_LISTINGS = [
   {
@@ -67,33 +75,6 @@ const MOCK_FALLBACK_LISTINGS = [
   }
 ];
 
-const AVAILABLE_BACKHAUL_TRUCKS = [
-  {
-    id: 'VR-8042',
-    carrier: 'Mahindra Logistics',
-    vehicle: 'Tata 407 (2.5T Cargo Box)',
-    returnRoute: 'Thane West Fleet Depot to Navi Mumbai',
-    availableAt: '09:30 AM',
-    capacity: '2.5T'
-  },
-  {
-    id: 'VR-9104',
-    carrier: 'Rivigo Freight',
-    vehicle: 'Eicher 11.10 (6.0T High Deck)',
-    returnRoute: 'Bhiwandi Warehousing Gateway to Mumbai',
-    availableAt: '01:15 PM',
-    capacity: '6.0T'
-  },
-  {
-    id: 'VR-4210',
-    carrier: 'BlueDart EcoBackhaul',
-    vehicle: 'Ashok Leyland Boss (4.5T EV Container)',
-    returnRoute: 'Turbhe Vashi Hub to Taloja',
-    availableAt: '08:45 AM',
-    capacity: '4.5T'
-  }
-];
-
 function normalizeListing(listing) {
   return {
     ...listing,
@@ -102,19 +83,42 @@ function normalizeListing(listing) {
   };
 }
 
+function formatVehicleAvailability(date, time) {
+  if (!date) return time || 'Date to be confirmed';
+  const parsedDate = new Date(`${date}T00:00:00`);
+  const formattedDate = Number.isNaN(parsedDate.getTime())
+    ? date
+    : parsedDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (!time) return formattedDate;
+  const [hours, minutes] = String(time).split(':').map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return `${formattedDate} · ${time}`;
+  const formattedTime = new Date(2000, 0, 1, hours, minutes).toLocaleTimeString('en-IN', {
+    hour: 'numeric',
+    minute: '2-digit'
+  });
+  return `${formattedDate} · ${formattedTime}`;
+}
+
 export default function MarketplacePage() {
   const { currentUser } = useAuth();
   const [dbListings, setDbListings] = useState(() => MOCK_FALLBACK_LISTINGS.map(normalizeListing));
   const [filterType, setFilterType] = useState('all');
   const [maxRadius, setMaxRadius] = useState(25);
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [selectedTruckId, setSelectedTruckId] = useState('');
+  const [logisticsVehicles, setLogisticsVehicles] = useState([]);
   const [claimedItem, setClaimedItem] = useState(null);
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
-  const [orderDetails, setOrderDetails] = useState({ quantity: '', destination: '', paymentMethod: 'Cash on delivery' });
+  const [orderDetails, setOrderDetails] = useState({
+    quantity: '',
+    destination: '',
+    deliveryAddress: { state: '', city: '', streetArea: '', landmark: '' },
+    pickupDate: '',
+    paymentMethod: 'Cash on delivery'
+  });
   const [orderError, setOrderError] = useState('');
   const [ordering, setOrdering] = useState(false);
+  const [transportSearchState, setTransportSearchState] = useState('idle');
 
   const [refreshing, setRefreshing] = useState(false);
 
@@ -125,14 +129,49 @@ export default function MarketplacePage() {
   useEffect(() => {
     setInquiryMessage('');
     setInquirySent(false);
-    setSelectedTruckId('');
     setOrderError('');
+    setTransportSearchState('idle');
     setOrderDetails({
       quantity: selectedProduct?.quantity || '',
       destination: '',
+      deliveryAddress: { state: '', city: '', streetArea: '', landmark: '' },
       paymentMethod: 'Cash on delivery'
+      ,pickupDate: new Date().toISOString().slice(0, 10)
+      ,pickupTime: '09:00'
     });
+    setLogisticsVehicles([]);
+    fetch(`${API_BASE_URL}/trucks`)
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('Could not load logistics vehicles.')))
+      .then(result => setLogisticsVehicles(Array.isArray(result.data) ? result.data : []))
+      .catch(() => setLogisticsVehicles([]));
   }, [selectedProduct?.id]);
+
+  const rankedLogisticsVehicles = useMemo(() => {
+    if (!selectedProduct) return [];
+    return rankLogisticsVehicles({
+      vehicles: logisticsVehicles,
+      sellerLocation: selectedProduct.location,
+      buyerDestination: orderDetails.destination,
+      quantity: orderDetails.quantity || selectedProduct.quantity,
+      unit: selectedProduct.unit,
+      requiredDate: orderDetails.pickupDate,
+      requiredTime: orderDetails.pickupTime
+    });
+  }, [selectedProduct, logisticsVehicles, orderDetails.quantity, orderDetails.destination, orderDetails.pickupDate, orderDetails.pickupTime]);
+
+  const selectedLogisticsEstimate = useMemo(() => {
+    const vehicle = rankedLogisticsVehicles[0];
+    if (!vehicle || !selectedProduct || !orderDetails.destination.trim()) return null;
+    try {
+      return calculateLogisticsEstimate({
+        sellerLocation: selectedProduct.location,
+        buyerDestination: orderDetails.destination,
+        vehicle
+      });
+    } catch {
+      return null;
+    }
+  }, [rankedLogisticsVehicles, selectedProduct, orderDetails.destination]);
 
   useEffect(() => {
     if (!selectedProduct) return undefined;
@@ -189,9 +228,9 @@ export default function MarketplacePage() {
       setOrderError('Only Buyer / Seller Organization accounts can purchase materials.');
       return;
     }
-    const selectedTruck = AVAILABLE_BACKHAUL_TRUCKS.find(truck => truck.id === selectedTruckId);
+    const selectedTruck = rankedLogisticsVehicles[0];
     if (!selectedTruck) {
-      setOrderError('Select an empty-return truck before reserving material.');
+      setOrderError('No compatible transportation is available for this shipment.');
       return;
     }
     setOrdering(true);
@@ -212,7 +251,21 @@ export default function MarketplacePage() {
           quantity: Number(orderDetails.quantity),
           destination: orderDetails.destination,
           paymentMethod: orderDetails.paymentMethod,
-          truck: selectedTruck
+          pickupDate: orderDetails.pickupDate,
+          pickupTime: orderDetails.pickupTime,
+          deliveryAddress: orderDetails.deliveryAddress,
+          logisticsVehicle: {
+            ...selectedTruck,
+            estimate: selectedLogisticsEstimate
+          },
+          logisticsCandidates: rankedLogisticsVehicles.map(vehicle => ({
+            ...vehicle,
+            estimate: calculateLogisticsEstimate({
+              sellerLocation: selectedProduct.location,
+              buyerDestination: orderDetails.destination,
+              vehicle
+            })
+          }))
         })
       });
       const data = await response.json();
@@ -225,6 +278,16 @@ export default function MarketplacePage() {
     } finally {
       setOrdering(false);
     }
+  };
+
+  const handleFindTransportation = () => {
+    if (rankedLogisticsVehicles.length === 0) {
+      setTransportSearchState('unavailable');
+      setOrderError('No compatible transportation is available for this shipment.');
+      return;
+    }
+    setOrderError('');
+    setTransportSearchState('sent');
   };
 
   const sendInquiry = async () => {
@@ -381,7 +444,8 @@ export default function MarketplacePage() {
           <div>
             <div style={{ fontWeight: '700', fontSize: '1rem' }}>Pickup Order Reserved!</div>
             <div style={{ fontSize: '0.85rem', color: '#A7F3D0' }}>
-              {claimedItem.selectedTruck.vehicle} ({claimedItem.selectedTruck.id}) assigned to {claimedItem.location} for {claimedItem.title}.
+              Transportation request pending with {claimedItem.selectedTruck.companyName || 'the logistics partner'} for {claimedItem.selectedTruck.truckName}.
+              {' '}The provider must accept the request before transport is confirmed.
             </div>
           </div>
         </div>
@@ -533,7 +597,7 @@ export default function MarketplacePage() {
           onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header Media */}
-            <div style={{ position: 'relative', height: '260px', background: '#0F172A' }}>
+            <div style={{ position: 'relative', height: '180px', background: '#0F172A' }}>
               <img
                 src={selectedProduct.image}
                 alt={selectedProduct.title}
@@ -576,12 +640,12 @@ export default function MarketplacePage() {
             </div>
 
             {/* Modal Body Specs */}
-            <div style={{ padding: '28px' }}>
+            <div style={{ padding: '20px' }}>
               <h3 style={{ fontSize: '1.4rem', fontWeight: '800', color: '#0F172A', marginBottom: '8px' }}>
                 {selectedProduct.title}
               </h3>
 
-              <div style={{ display: 'flex', gap: '16px', color: '#64748B', fontSize: '0.9rem', marginBottom: '20px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '12px', color: '#64748B', fontSize: '0.86rem', marginBottom: '14px', flexWrap: 'wrap' }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <MapPin size={16} color="#10B981" /> {selectedProduct.distanceKm || 5} km away ({selectedProduct.location})
                 </span>
@@ -592,17 +656,17 @@ export default function MarketplacePage() {
               </div>
 
               {/* Price & Value Highlight Box */}
-              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '16px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '12px 14px', borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                 <div>
                   <div style={{ fontSize: '0.78rem', color: '#64748B', textTransform: 'uppercase', fontWeight: '700' }}>Asking Price</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: '800', color: '#0F5132' }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0F5132' }}>
                     {selectedProduct.isFree || selectedProduct.price === 0 ? 'FREE CLEARANCE' : `₹${selectedProduct.price} / ${selectedProduct.unit || 'unit'}`}
                   </div>
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
                   <div style={{ fontSize: '0.78rem', color: '#64748B', textTransform: 'uppercase', fontWeight: '700' }}>Total Lot Price</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#0F172A' }}>
+                  <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#0F172A' }}>
                     {selectedProduct.isFree || selectedProduct.price === 0 ? '₹0' : `₹${(selectedProduct.price * selectedProduct.quantity).toLocaleString()}`}
                   </div>
                 </div>
@@ -610,14 +674,34 @@ export default function MarketplacePage() {
 
               {/* Avoided Carbon Breakdown Box */}
               {(() => {
-                const carbon = calculateAvoidedCarbon(selectedProduct.materialType || 'cardboard', selectedProduct.quantity || 100, selectedProduct.distanceKm || 5, selectedProduct.grade || 'A');
+                const carbon = calculateAvoidedCarbon(selectedProduct.materialType || 'cardboard', Number(orderDetails.quantity || selectedProduct.quantity || 100), selectedLogisticsEstimate?.distanceKm || selectedProduct.distanceKm || 5, selectedProduct.grade || 'A');
                 return (
-                  <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '16px', borderRadius: '10px', marginBottom: '20px', color: '#047857' }}>
-                    <div style={{ fontWeight: '800', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                      <Leaf size={18} /> ISO 14044 Avoided Carbon: {carbon.netCO2eAvoided} kg CO₂e
+                  <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', padding: '10px 12px', borderRadius: '9px', marginBottom: '14px', color: '#047857' }}>
+                    <div style={{ fontWeight: '800', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                      <Leaf size={16} /> Estimated CO₂e Avoided: {carbon.netCO2eAvoided} kg CO₂e
                     </div>
-                    <div style={{ fontSize: '0.85rem' }}>
-                      🌳 Equivalent to planting <strong>~{carbon.treesEquivalent} mature trees/year</strong> or displacing <strong>~{carbon.carKmEquivalent} km of freight travel</strong>.
+                    <div style={{ fontSize: '0.72rem', marginTop: '3px' }}>Estimated from the material&apos;s reuse/recycling pathway.</div>
+                  </div>
+                );
+              })()}
+
+              {rankedLogisticsVehicles[0] && selectedLogisticsEstimate && (() => {
+                const carbon = calculateAvoidedCarbon(
+                  selectedProduct.materialType || 'cardboard',
+                  Number(orderDetails.quantity || selectedProduct.quantity || 100),
+                  selectedLogisticsEstimate.distanceKm,
+                  selectedProduct.grade || 'A'
+                );
+                const selectedVehicle = rankedLogisticsVehicles[0];
+                return (
+                  <div style={{ background: '#F8FAFC', border: '1px solid #CBD5E1', padding: '10px 12px', borderRadius: '9px', marginBottom: '14px', color: '#334155' }}>
+                    <div style={{ fontWeight: '800', color: '#0F172A', marginBottom: '8px' }}>Selected Logistics</div>
+                    <div style={{ display: 'grid', gap: '4px', fontSize: '0.86rem' }}>
+                      <div>Vehicle: <strong>{selectedVehicle?.truckName}</strong></div>
+                      <div>Route: <strong>{selectedVehicle?.originCity} → {selectedVehicle?.destinationCity}</strong></div>
+                      <div>Distance: <strong>{selectedLogisticsEstimate.distanceKm} km</strong></div>
+                      <div>Estimated Transport Cost: <strong>₹{selectedLogisticsEstimate.transportCost.toLocaleString('en-IN')}</strong></div>
+                      <div>Estimated Transport Emissions: <strong>{carbon.eTransport} kg CO₂e</strong></div>
                     </div>
                   </div>
                 );
@@ -625,42 +709,32 @@ export default function MarketplacePage() {
 
               {/* Seller & Listing Origin Verification Box */}
               <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '16px', borderRadius: '10px', marginBottom: '20px' }}>
-                <h4 style={{ fontSize: '0.88rem', textTransform: 'uppercase', color: '#475569', fontWeight: '800', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <Building2 size={16} color="#10B981" /> Verified Seller & Origin Specifications
+                <h4 style={{ fontSize: '0.9rem', color: '#0F172A', fontWeight: '800', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Building2 size={16} color="#10B981" /> Seller & Pickup
                 </h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', fontSize: '0.88rem', color: '#334155' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px', fontSize: '0.82rem', color: '#334155' }}>
                   <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase' }}>SELLER ORGANIZATION</span>
-                    <strong style={{ color: '#0F172A', fontSize: '0.95rem' }}>{selectedProduct.companyName || 'B2B Circular Partner'}</strong>
-                    <div style={{ color: '#059669', fontSize: '0.82rem', fontWeight: '600' }}>@{selectedProduct.createdBy} ({selectedProduct.ownerRole || 'Supplier'})</div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.7rem', fontWeight: '700' }}>Seller</span>
+                    <strong style={{ color: '#0F172A' }}>{selectedProduct.companyName || 'B2B Circular Partner'}</strong>
                   </div>
-
                   <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase' }}>CONTACT CORPORATE EMAIL</span>
-                    <strong style={{ color: '#2563EB', fontSize: '0.9rem', wordBreak: 'break-all' }}>
-                      ✉️ {selectedProduct.createdByEmail || `contact@${selectedProduct.createdBy}.com`}
-                    </strong>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.7rem', fontWeight: '700' }}>Pickup</span>
+                    <strong style={{ color: '#0F172A' }}>{selectedProduct.location}</strong>
                   </div>
-
                   <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase' }}>LISTING DATE</span>
-                    <strong style={{ color: '#0F172A' }}>
-                      📅 {new Date(selectedProduct.createdAt || Date.now()).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                    </strong>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.7rem', fontWeight: '700' }}>Listing Date</span>
+                    <strong style={{ color: '#0F172A' }}>{new Date(selectedProduct.createdAt || Date.now()).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>
                   </div>
-
                   <div>
-                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase' }}>PICKUP LOCATION</span>
-                    <strong style={{ color: '#0F172A' }}>
-                      📍 {selectedProduct.location} ({selectedProduct.distanceKm || 5} km)
-                    </strong>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.7rem', fontWeight: '700' }}>Seller status</span>
+                    <strong style={{ color: '#047857' }}>Verified</strong>
                   </div>
                 </div>
               </div>
 
-              <div style={{ marginBottom: '20px' }}>
-                <h4 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#0F172A', marginBottom: '6px' }}>Product & Pickup Description</h4>
-                <p style={{ fontSize: '0.9rem', color: '#475569', lineHeight: 1.6 }}>
+              <div style={{ marginBottom: '14px' }}>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: '700', color: '#0F172A', marginBottom: '4px' }}>Description</h4>
+                <p style={{ fontSize: '0.82rem', color: '#475569', lineHeight: 1.45, margin: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                   {selectedProduct.description || 'Verified circular packaging material lot ready for B2B pickup.'}
                 </p>
               </div>
@@ -685,55 +759,70 @@ export default function MarketplacePage() {
 
               <div style={{ background: '#F0FDF4', border: '1px solid #BBF7D0', padding: '16px', borderRadius: '10px', marginBottom: '20px' }}>
                 <h4 style={{ fontSize: '0.95rem', fontWeight: '800', color: '#14532D', margin: '0 0 5px', display: 'flex', alignItems: 'center', gap: '7px' }}>
-                  <Truck size={17} /> Available empty-return trucks
+                  <Truck size={17} /> Finding Transportation
                 </h4>
                 <p style={{ fontSize: '0.82rem', color: '#166534', margin: '0 0 12px' }}>
-                  Select a truck returning empty from a retail delivery for this pickup.
+                  We will send a request to the best available option after you confirm the purchase.
                 </p>
-                <div style={{ display: 'grid', gap: '8px' }}>
-                  {AVAILABLE_BACKHAUL_TRUCKS.map(truck => {
-                    const isSelected = selectedTruckId === truck.id;
-                    return (
-                      <button
-                        key={truck.id}
-                        type="button"
-                        onClick={() => setSelectedTruckId(truck.id)}
-                        style={{
-                          textAlign: 'left',
-                          padding: '12px',
-                          borderRadius: '8px',
-                          border: isSelected ? '2px solid #059669' : '1px solid #D1FAE5',
-                          background: isSelected ? '#DCFCE7' : 'white',
-                          cursor: 'pointer',
-                          color: '#0F172A'
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
-                          <strong>{truck.vehicle}</strong>
-                          <span style={{ color: '#047857', fontWeight: '700', fontSize: '0.8rem' }}>{truck.id} · {truck.capacity}</span>
-                        </div>
-                        <div style={{ fontSize: '0.8rem', color: '#475569', marginTop: '4px' }}>
-                          {truck.carrier} · {truck.returnRoute} · Empty at {truck.availableAt}
-                        </div>
-                      </button>
-                    );
-                  })}
+                <div style={{ display: 'grid', gap: '6px', background: 'white', border: '1px solid #D1FAE5', borderRadius: '8px', padding: '10px 12px', marginBottom: '12px', color: '#334155', fontSize: '0.82rem' }}>
+                  <div><strong>Pickup:</strong> {selectedProduct.location || 'Seller location'}</div>
+                  <div><strong>Delivery:</strong> {orderDetails.destination.trim() || 'Enter your delivery destination below'}</div>
+                  <div><strong>Material:</strong> {selectedProduct.title || selectedProduct.materialType || 'Selected material'}</div>
+                  <div><strong>Quantity:</strong> {orderDetails.quantity || selectedProduct.quantity} {selectedProduct.unit || 'units'}</div>
+                </div>
+                <label style={{ display: 'block', marginBottom: 10, color: '#334155', fontSize: 13 }}>
+                  Pickup date
+                  <input type="date" required value={orderDetails.pickupDate} onChange={event => {
+                    setOrderDetails({ ...orderDetails, pickupDate: event.target.value });
+                  }} style={{ width: '100%', padding: 9, marginTop: 4, border: '1px solid #CBD5E1', borderRadius: 6 }} />
+                </label>
+                <label style={{ display: 'block', marginBottom: 10, color: '#334155', fontSize: 13 }}>
+                  Requested pickup time
+                  <input type="time" required value={orderDetails.pickupTime} onChange={event => {
+                    setOrderDetails({ ...orderDetails, pickupTime: event.target.value });
+                  }} style={{ width: '100%', padding: 9, marginTop: 4, border: '1px solid #CBD5E1', borderRadius: 6 }} />
+                </label>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={handleFindTransportation}
+                  disabled={!orderDetails.destination.trim() || !orderDetails.quantity || transportSearchState === 'sent'}
+                  style={{ width: '100%', justifyContent: 'center', padding: '10px' }}
+                >
+                  <Truck size={16} /> {transportSearchState === 'sent' ? 'Transportation Found' : 'Find Transportation'}
+                </button>
+                <div style={{ marginTop: '8px', fontSize: '0.78rem', color: transportSearchState === 'unavailable' ? '#92400E' : '#166534' }}>
+                  {transportSearchState === 'sent' && rankedLogisticsVehicles[0]
+                    ? `Best match: ${rankedLogisticsVehicles[0].companyName || 'available logistics partner'} · ${rankedLogisticsVehicles[0].truckName}. The request will be sent when you confirm the purchase.`
+                    : transportSearchState === 'unavailable'
+                      ? 'No compatible transportation is available for this shipment.'
+                      : 'We will contact the best compatible provider based on route, capacity, date, time, and cost.'}
                 </div>
               </div>
 
               {/* Checkout and reservation */}
               <form onSubmit={handleConfirmReserve} style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', padding: 16, borderRadius: 10, marginTop: 24 }}>
-                <h4 style={{ margin: '0 0 12px', color: '#065F46' }}>Complete reservation</h4>
+                <h4 style={{ margin: '0 0 12px', color: '#065F46' }}>Reserve Material</h4>
                 {!currentUser && <p style={{ color: '#B45309', marginTop: 0 }}>Sign in to provide buyer and payment information.</p>}
                 {orderError && <div style={{ color: '#991B1B', background: '#FEF2F2', padding: 8, borderRadius: 6, marginBottom: 10 }}>{orderError}</div>}
                 <label style={{ display: 'block', marginBottom: 10, color: '#334155', fontSize: 13 }}>
                   Quantity ({selectedProduct.unit || 'units'})
                   <input type="number" min="1" max={selectedProduct.quantity} required value={orderDetails.quantity} onChange={event => setOrderDetails({ ...orderDetails, quantity: event.target.value })} style={{ width: '100%', padding: 9, marginTop: 4, border: '1px solid #CBD5E1', borderRadius: 6 }} />
                 </label>
-                <label style={{ display: 'block', marginBottom: 10, color: '#334155', fontSize: 13 }}>
-                  Delivery destination
-                  <textarea required rows="2" value={orderDetails.destination} onChange={event => setOrderDetails({ ...orderDetails, destination: event.target.value })} placeholder="Full delivery address and contact details" style={{ width: '100%', padding: 9, marginTop: 4, border: '1px solid #CBD5E1', borderRadius: 6 }} />
-                </label>
+                <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px', marginBottom: 10 }}>
+                  <h4 style={{ margin: '0 0 12px', color: '#0F172A' }}>Delivery Address</h4>
+                  <AddressForm
+                    value={orderDetails.deliveryAddress}
+                    onChange={deliveryAddress => setOrderDetails({
+                      ...orderDetails,
+                      deliveryAddress,
+                      destination: formatAddress(deliveryAddress)
+                    })}
+                    idPrefix="buyer-delivery-address"
+                    compact
+                    required
+                  />
+                </div>
                 <label style={{ display: 'block', color: '#334155', fontSize: 13 }}>
                   Payment method
                   <select value={orderDetails.paymentMethod} onChange={event => setOrderDetails({ ...orderDetails, paymentMethod: event.target.value })} style={{ width: '100%', padding: 9, marginTop: 4, border: '1px solid #CBD5E1', borderRadius: 6 }}>
@@ -743,8 +832,8 @@ export default function MarketplacePage() {
                     <option>Pay on pickup</option>
                   </select>
                 </label>
-                <button className="btn-primary" type="submit" disabled={ordering || isOwnListing || !selectedTruckId} style={{ width: '100%', justifyContent: 'center', marginTop: 14, opacity: selectedTruckId ? 1 : 0.55 }}>
-                  <Truck size={18} /> {ordering ? 'Processing reservation...' : 'Confirm purchase & dispatch pickup'}
+                <button className="btn-primary" type="submit" disabled={ordering || isOwnListing || transportSearchState !== 'sent'} style={{ width: '100%', justifyContent: 'center', marginTop: 14, opacity: transportSearchState === 'sent' ? 1 : 0.55 }}>
+                  <Check size={18} /> {ordering ? 'Processing purchase...' : 'Confirm Purchase'}
                 </button>
               </form>
 

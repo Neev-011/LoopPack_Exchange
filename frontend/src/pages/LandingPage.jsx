@@ -194,7 +194,7 @@ export default function LandingPage({ setActiveTab }) {
           <div style={{ fontSize: '0.78rem', color: '#10B981', fontWeight: '800', textTransform: 'uppercase', marginBottom: '6px' }}>Step 2</div>
           <h4 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0F172A', marginBottom: '6px' }}>Geo-Match & Logistics</h4>
           <p style={{ fontSize: '0.88rem', color: '#64748B', lineHeight: 1.5 }}>
-            PostGIS spatial engine connects nearby buyers while VRP solver routes empty backhaul trucks.
+            Location-aware matching connects buyers with available logistics vehicles and routes.
           </p>
         </div>
 

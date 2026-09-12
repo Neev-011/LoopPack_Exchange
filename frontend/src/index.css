@@ -36,6 +36,42 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+.address-form-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 14px;
+  row-gap: 12px;
+}
+
+.address-form-compact > div {
+  min-width: 0;
+}
+
+.address-form-compact input,
+.address-form-compact select {
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid #CBD5E1;
+  border-radius: 7px;
+  font: inherit;
+  color: #0F172A;
+  background: #FFFFFF;
+}
+
+.address-form-compact label {
+  display: block;
+  margin-bottom: 5px;
+  color: #334155;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .address-form-compact {
+    grid-template-columns: 1fr;
+  }
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-heading);
 }
