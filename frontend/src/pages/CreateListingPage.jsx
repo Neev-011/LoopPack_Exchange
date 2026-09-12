@@ -28,6 +28,7 @@ export default function CreateListingPage({ setActiveTab }) {
       return;
     }
     setErrorMsg(null);
+    if (res.image) setScannedImage(res.image);
     if (res.detectedType) setMaterialType(res.detectedType);
     if (res.suggestedGrade) setGrade(res.suggestedGrade);
     if (res.materialName && !title) setTitle(`100x ${res.materialName}`);
