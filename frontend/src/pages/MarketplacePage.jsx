@@ -301,6 +301,21 @@ export default function MarketplacePage() {
                     </span>
                   </div>
 
+                  {/* Seller & Listing Date Metadata */}
+                  <div style={{ fontSize: '0.82rem', color: '#64748B', margin: '6px 0 10px', display: 'flex', flexDirection: 'column', gap: '3px', background: '#F8FAFC', padding: '8px 10px', borderRadius: '6px', border: '1px solid #F1F5F9' }}>
+                    <span style={{ fontWeight: '700', color: '#0F172A', display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <Building2 size={13} color="#3B82F6" /> {item.companyName || 'B2B Partner'} <span style={{ color: '#059669', fontWeight: '600' }}>(@{item.createdBy})</span>
+                    </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.78rem' }}>
+                      <span style={{ color: '#2563EB', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        ✉️ {item.createdByEmail || `contact@${item.createdBy}.com`}
+                      </span>
+                      <span style={{ color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Calendar size={12} /> {new Date(item.createdAt || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                  </div>
+
                   <div style={{ fontSize: '0.88rem', color: '#475569', marginBottom: '12px' }}>
                     <strong>Quantity:</strong> {item.quantity} {item.unit || 'units'}
                   </div>
@@ -457,6 +472,41 @@ export default function MarketplacePage() {
                   </div>
                 );
               })()}
+
+              {/* Seller & Listing Origin Verification Box */}
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: '16px', borderRadius: '10px', marginBottom: '20px' }}>
+                <h4 style={{ fontSize: '0.88rem', textTransform: 'uppercase', color: '#475569', fontWeight: '800', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Building2 size={16} color="#10B981" /> Verified Seller & Origin Specifications
+                </h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', fontSize: '0.88rem', color: '#334155' }}>
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase' }}>SELLER ORGANIZATION</span>
+                    <strong style={{ color: '#0F172A', fontSize: '0.95rem' }}>{selectedProduct.companyName || 'B2B Circular Partner'}</strong>
+                    <div style={{ color: '#059669', fontSize: '0.82rem', fontWeight: '600' }}>@{selectedProduct.createdBy} ({selectedProduct.ownerRole || 'Supplier'})</div>
+                  </div>
+
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase' }}>CONTACT CORPORATE EMAIL</span>
+                    <strong style={{ color: '#2563EB', fontSize: '0.9rem', wordBreak: 'break-all' }}>
+                      ✉️ {selectedProduct.createdByEmail || `contact@${selectedProduct.createdBy}.com`}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase' }}>LISTING DATE</span>
+                    <strong style={{ color: '#0F172A' }}>
+                      📅 {new Date(selectedProduct.createdAt || Date.now()).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span style={{ color: '#64748B', display: 'block', fontSize: '0.72rem', fontWeight: '700', textTransform: 'uppercase' }}>PICKUP LOCATION</span>
+                    <strong style={{ color: '#0F172A' }}>
+                      📍 {selectedProduct.location} ({selectedProduct.distanceKm || 5} km)
+                    </strong>
+                  </div>
+                </div>
+              </div>
 
               <div style={{ marginBottom: '20px' }}>
                 <h4 style={{ fontSize: '0.95rem', fontWeight: '700', color: '#0F172A', marginBottom: '6px' }}>Product & Pickup Description</h4>

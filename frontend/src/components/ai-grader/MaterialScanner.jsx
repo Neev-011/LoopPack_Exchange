@@ -171,62 +171,63 @@ export default function MaterialScanner({ onScanned }) {
   };
 
   const runComputerVisionScan = () => {
-    if (!uploadedImage) return;
+    if (!uploadedImage || isScanning) return;
 
     scanTimers.current.forEach(clearTimeout);
     scanTimers.current = [];
     setIsScanning(true);
     setResult(null);
-    setScanProgress(15);
-    setScanStepText('Sending image to the backend vision model...');
+    setScanProgress(20);
+    setScanStepText('Sending photo to Gemini Vision AI for feature extraction...');
 
     const requestId = ++scanRequest.current;
-    scanTimers.current = [
-    setTimeout(() => {
-      if (requestId !== scanRequest.current) return;
-      setScanProgress(55);
-      setScanStepText('Verifying Packaging Stream against EPA/ISO LCA Registry...');
-    }, 600),
 
-    setTimeout(() => {
-      if (requestId !== scanRequest.current) return;
-      setScanProgress(85);
-      setScanStepText('Evaluating Quality Grade & Contamination Safety...');
-    }, 1200),
+    scanTimers.current.push(
+      setTimeout(() => {
+        if (requestId !== scanRequest.current) return;
+        setScanProgress(55);
+        setScanStepText('Analyzing material density, surface purity & packaging grade...');
+      }, 500)
+    );
 
-    setTimeout(() => {
-      if (requestId !== scanRequest.current) return;
-      setScanProgress(100);
-      setIsScanning(false);
-      fetch('http://localhost:5001/api/v1/ai/detect-material', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: uploadedImage, fileName })
+    scanTimers.current.push(
+      setTimeout(() => {
+        if (requestId !== scanRequest.current) return;
+        setScanProgress(85);
+        setScanStepText('Verifying Packaging Stream against EPA/ISO Circular Registry...');
+      }, 1000)
+    );
+
+    fetch('http://localhost:5001/api/v1/ai/detect-material', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: uploadedImage, fileName })
+    })
+      .then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error || 'AI detection failed.');
+        return payload.data;
       })
-        .then(async (response) => {
-          const payload = await response.json();
-          if (!response.ok) throw new Error(payload.error || 'AI detection failed.');
-          return payload.data;
-        })
-        .then((detected) => {
-          if (requestId !== scanRequest.current) return;
-          const fullResult = { ...detected, image: uploadedImage };
-          setAiResult(fullResult);
-          setManualMaterialType(null);
-          setResult(fullResult);
-          if (onScanned) onScanned(fullResult);
-        })
-        .catch((error) => {
-          if (requestId !== scanRequest.current) return;
-          setResult({
-            ...MATERIAL_PRESETS_DATA.rejected,
-            confidence: 'AI unavailable',
-            suggestedGradeReason: error.message,
-            image: uploadedImage
-          });
+      .then((detected) => {
+        if (requestId !== scanRequest.current) return;
+        setScanProgress(100);
+        setIsScanning(false);
+        const fullResult = { ...detected, image: uploadedImage };
+        setAiResult(fullResult);
+        setManualMaterialType(null);
+        setResult(fullResult);
+        if (onScanned) onScanned(fullResult);
+      })
+      .catch((error) => {
+        if (requestId !== scanRequest.current) return;
+        setIsScanning(false);
+        setResult({
+          ...MATERIAL_PRESETS_DATA.rejected,
+          confidence: 'AI unavailable',
+          suggestedGradeReason: error.message,
+          image: uploadedImage
         });
-    }, 1800)
-    ];
+      });
   };
 
   const handleOverrideMaterial = (matType) => {

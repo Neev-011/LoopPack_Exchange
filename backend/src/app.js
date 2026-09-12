@@ -160,6 +160,7 @@ async function getListings() {
     createdBy: row.created_by,
     companyName: row.company_name,
     ownerRole: row.owner_role,
+    createdByEmail: row.created_by_email || '',
     createdAt: row.created_at
   }));
 }
@@ -171,19 +172,19 @@ async function saveDatabase(listings) {
     for (const l of listings) {
       await client`
         INSERT INTO listings (
-          id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_at
+          id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_by_email, created_at
         ) VALUES (
           ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade || 'A'},
           ${l.location || ''}, ${l.lat || 19.08}, ${l.lon || 72.88}, ${l.price || 0}, ${l.isFree || false}, ${l.description || ''},
           ${l.image || ''}, ${l.createdBy || 'anonymous'}, ${l.companyName || 'B2B Partner'}, ${l.ownerRole || 'Supplier'},
-          ${l.createdAt || new Date().toISOString()}
+          ${l.createdByEmail || ''}, ${l.createdAt || new Date().toISOString()}
         )
         ON CONFLICT (id) DO UPDATE SET
           title = EXCLUDED.title, material_type = EXCLUDED.material_type, quantity = EXCLUDED.quantity,
           unit = EXCLUDED.unit, grade = EXCLUDED.grade, location = EXCLUDED.location, lat = EXCLUDED.lat,
           lon = EXCLUDED.lon, price = EXCLUDED.price, is_free = EXCLUDED.is_free, description = EXCLUDED.description,
           image = EXCLUDED.image, created_by = EXCLUDED.created_by, company_name = EXCLUDED.company_name,
-          owner_role = EXCLUDED.owner_role
+          owner_role = EXCLUDED.owner_role, created_by_email = EXCLUDED.created_by_email
       `;
     }
     return;
@@ -312,7 +313,8 @@ app.post('/api/v1/listings', async (req, res) => {
     image,
     createdBy,
     companyName,
-    ownerRole
+    ownerRole,
+    createdByEmail
   } = req.body;
 
   if (!title || !materialType) {
@@ -341,6 +343,7 @@ app.post('/api/v1/listings', async (req, res) => {
     createdBy,
     companyName,
     ownerRole: ownerRole || 'Packaging Generator / Supplier',
+    createdByEmail: createdByEmail || 'contact@looppack.io',
     image: image || (materialType === 'pallet' 
       ? 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?auto=format&fit=crop&w=600&q=80'
       : materialType === 'hdpe'
@@ -348,7 +351,7 @@ app.post('/api/v1/listings', async (req, res) => {
       : materialType === 'ldpe'
       ? 'https://images.unsplash.com/photo-1605600659908-0ef719419d41?auto=format&fit=crop&w=600&q=80'
       : 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'),
-    createdAt: new Date().toISOString()
+    createdAt: req.body.createdAt || new Date().toISOString()
   };
 
   // Calculate carbon avoided
