@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeAvoidedCarbon } from './services/carbonEngineService.js';
-import { searchListingsPostGIS } from './services/spatialService.js';
+import { searchListingsPostGIS, geocodeLocation } from './services/spatialService.js';
 import { isNeonConnected, getNeonClient } from './config/neonDb.js';
 import { detectMaterialFromImage } from './services/imageDetectionService.js';
 import {
@@ -24,6 +24,7 @@ import {
   updateUserProfile,
   changeUserPassword
 } from './services/authService.js';
+import { solveOptimizedBackhaulRoute } from './services/vrpSolverService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -502,6 +503,93 @@ app.post('/api/v1/carbon/calculate', (req, res) => {
   const { materialType, quantity, distanceKm, grade } = req.body;
   const result = computeAvoidedCarbon(materialType, quantity, distanceKm, grade);
   res.json(result);
+});
+
+// 6. Google OR-Tools & OSRM VRP Logistics Backhaul Route Optimizer Endpoint
+app.post('/api/v1/logistics/optimize-route', async (req, res) => {
+  try {
+    const { pickups, depot, dropFacility, originCity, destinationCity } = req.body || {};
+
+    // 1. Resolve Origin Depot (Geocode if string location is provided)
+    let resolvedDepot;
+    if (typeof originCity === 'string' && originCity.trim()) {
+      const geo = await geocodeLocation(originCity);
+      resolvedDepot = { lat: geo.lat, lon: geo.lon, name: `Depot: ${geo.name}`, location: geo.name };
+    } else if (depot && depot.lat && depot.lon) {
+      resolvedDepot = depot;
+    } else {
+      const geo = await geocodeLocation('Thane West');
+      resolvedDepot = { lat: geo.lat, lon: geo.lon, name: 'Thane Freight Depot', location: geo.name };
+    }
+
+    // 2. Resolve Destination Refurbishing / Recycling Hub
+    let resolvedDrop;
+    if (typeof destinationCity === 'string' && destinationCity.trim()) {
+      const geo = await geocodeLocation(destinationCity);
+      resolvedDrop = { lat: geo.lat, lon: geo.lon, name: `Drop: ${geo.name}`, address: geo.name };
+    } else if (dropFacility && dropFacility.lat && dropFacility.lon) {
+      resolvedDrop = dropFacility;
+    } else {
+      const geo = await geocodeLocation('Mahape Navi Mumbai');
+      resolvedDrop = { lat: geo.lat, lon: geo.lon, name: 'GreenPack Refurbishing Hub', address: geo.name };
+    }
+
+    // 3. Resolve Pickup Nodes (Use provided or load from actual active DB listings)
+    let resolvedPickups = [];
+    if (Array.isArray(pickups) && pickups.length > 0) {
+      resolvedPickups = await Promise.all(pickups.map(async (p, idx) => {
+        if (p.lat && p.lon) return p;
+        const geo = await geocodeLocation(p.location || p.address || p.title || 'Mumbai');
+        return {
+          id: p.id || `p_${idx + 1}`,
+          title: p.title || `Pickup ${idx + 1}`,
+          location: geo.name,
+          lat: geo.lat,
+          lon: geo.lon,
+          quantity: p.quantity || 100,
+          unit: p.unit || 'units',
+          materialType: p.materialType || 'packaging'
+        };
+      }));
+    } else {
+      // Load actual active marketplace listings from Neon DB / JSON database
+      const dbListings = await getListings();
+      if (dbListings && dbListings.length > 0) {
+        resolvedPickups = await Promise.all(dbListings.slice(0, 5).map(async (item, idx) => {
+          let lat = item.lat;
+          let lon = item.lon;
+          if (!lat || !lon) {
+            const geo = await geocodeLocation(item.location || 'Navi Mumbai');
+            lat = geo.lat;
+            lon = geo.lon;
+          }
+          return {
+            id: String(item.id),
+            title: item.title,
+            location: item.location || 'Industrial Hub',
+            lat,
+            lon,
+            quantity: item.quantity,
+            unit: item.unit,
+            materialType: item.materialType
+          };
+        }));
+      } else {
+        // Fallback geocoded hubs
+        resolvedPickups = [
+          { id: 'p1', title: '500 HDPE Drums Lot', location: 'Navi Mumbai Hub', lat: 19.080, lon: 73.010, quantity: 500, unit: 'drums', materialType: 'hdpe' },
+          { id: 'p2', title: '1,200 Balewrapped Corrugated Box Lot', location: 'Bhiwandi Gateway', lat: 19.290, lon: 73.060, quantity: 1200, unit: 'kg', materialType: 'cardboard' },
+          { id: 'p3', title: '350 Wooden Euro Pallets', location: 'Thane MIDC Industrial', lat: 19.200, lon: 72.980, quantity: 350, unit: 'pallets', materialType: 'pallet' }
+        ];
+      }
+    }
+
+    const result = await solveOptimizedBackhaulRoute(resolvedPickups, resolvedDepot, resolvedDrop);
+    res.json({ status: 'success', data: result });
+  } catch (err) {
+    console.error('[OR-Tools / OSRM VRP Solver Error]:', err);
+    res.status(500).json({ error: `VRP Optimization failed: ${err.message}` });
+  }
 });
 
 // 7. Logistics Fleet Truck Endpoints
