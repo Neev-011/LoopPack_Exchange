@@ -67,9 +67,17 @@ const MOCK_FALLBACK_LISTINGS = [
   }
 ];
 
+function normalizeListing(listing) {
+  return {
+    ...listing,
+    createdBy: listing.createdBy || 'marketplace_supplier',
+    companyName: listing.companyName || 'Marketplace Supplier'
+  };
+}
+
 export default function MarketplacePage() {
   const { currentUser } = useAuth();
-  const [dbListings, setDbListings] = useState(MOCK_FALLBACK_LISTINGS);
+  const [dbListings, setDbListings] = useState(() => MOCK_FALLBACK_LISTINGS.map(normalizeListing));
   const [filterType, setFilterType] = useState('all');
   const [maxRadius, setMaxRadius] = useState(25);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -79,6 +87,15 @@ export default function MarketplacePage() {
 
   const [refreshing, setRefreshing] = useState(false);
 
+  const isOwnListing = selectedProduct
+    && currentUser?.username
+    && selectedProduct.createdBy === currentUser.username;
+
+  useEffect(() => {
+    setInquiryMessage('');
+    setInquirySent(false);
+  }, [selectedProduct?.id]);
+
   // Fetch live database listings from Neon PostgreSQL
   const fetchListings = async () => {
     setRefreshing(true);
@@ -87,7 +104,7 @@ export default function MarketplacePage() {
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
-          setDbListings(json.data);
+          setDbListings(json.data.map(normalizeListing));
         }
       }
     } catch (err) {
@@ -448,15 +465,23 @@ export default function MarketplacePage() {
                 </p>
               </div>
 
-              {selectedProduct.createdBy && selectedProduct.createdBy !== currentUser?.username && (
-                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: 16, borderRadius: 10, marginBottom: 20 }}>
-                  <h4 style={{ margin: '0 0 8px', color: '#0F172A' }}>Contact the seller</h4>
-                  {inquirySent ? <p style={{ color: '#047857', margin: 0 }}>Inquiry sent. The seller can respond from their Relationship Hub.</p> : <>
+              <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', padding: 16, borderRadius: 10, marginBottom: 20 }}>
+                <h4 style={{ margin: '0 0 8px', color: '#0F172A' }}>
+                  {isOwnListing ? 'Your posted material' : 'Contact the seller'}
+                </h4>
+                {isOwnListing ? (
+                  <p style={{ color: '#64748B', margin: 0 }}>
+                    This is your listing. Buyer inquiries and chat messages are available in My Materials.
+                  </p>
+                ) : inquirySent ? (
+                  <p style={{ color: '#047857', margin: 0 }}>Inquiry sent. The seller can respond from their Relationship Hub.</p>
+                ) : (
+                  <>
                     <textarea rows="3" value={inquiryMessage} onChange={e => setInquiryMessage(e.target.value)} placeholder="Ask about availability, pickup timing, condition, or pricing..." style={{ width: '100%', padding: 10, borderRadius: 6, border: '1px solid #CBD5E1', marginBottom: 8 }} />
                     <button className="btn-secondary" onClick={sendInquiry} disabled={!inquiryMessage.trim()}><MessageSquare size={15} /> Send inquiry & open chat</button>
-                  </>}
-                </div>
-              )}
+                  </>
+                )}
+              </div>
 
               {/* Modal Action Buttons */}
               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
