@@ -427,11 +427,134 @@ app.post('/api/v1/carbon/calculate', (req, res) => {
   res.json(result);
 });
 
-// 6. Eco-Logistics Route Optimization
-app.post('/api/v1/logistics/optimize-route', async (req, res) => {
-  const listings = await getListings();
-  const route = solveOptimizedBackhaulRoute(listings);
-  res.json(route);
+// 7. Logistics Fleet Truck Endpoints
+app.get('/api/v1/trucks', async (req, res) => {
+  const client = getNeonClient();
+  if (client) {
+    try {
+      const owner = req.query.owner;
+      const rows = owner
+        ? await client`SELECT * FROM trucks WHERE created_by = ${owner} ORDER BY created_at DESC`
+        : await client`SELECT * FROM trucks ORDER BY created_at DESC`;
+
+      const data = rows.map(r => ({
+        id: r.id,
+        truckName: r.truck_name,
+        vehicleReg: r.vehicle_reg,
+        capacityTons: Number(r.capacity_tons),
+        originCity: r.origin_city,
+        destinationCity: r.destination_city,
+        availableDate: r.available_date,
+        ratePerKm: Number(r.rate_per_km),
+        driverName: r.driver_name,
+        driverPhone: r.driver_phone,
+        status: r.status,
+        createdBy: r.created_by,
+        companyName: r.company_name,
+        companyEmail: r.company_email,
+        createdAt: r.created_at
+      }));
+      return res.json({ total: data.length, data });
+    } catch (err) {
+      console.error('[Neon DB Trucks Read Error]:', err.message);
+    }
+  }
+
+  // Fallback preset trucks
+  res.json({
+    total: 3,
+    data: [
+      { id: 'trk_1', truckName: 'Tata 407 2.5T EV Container', vehicleReg: 'MH-04-FK-8492', capacityTons: 2.5, originCity: 'Mahape, Navi Mumbai', destinationCity: 'Bhiwandi Gateway', availableDate: 'Available Today', ratePerKm: 28, driverName: 'Ramesh Sharma', driverPhone: '+91 98201 48291', status: 'available', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() },
+      { id: 'trk_2', truckName: 'Eicher 11.10 6.0T High Deck CNG', vehicleReg: 'MH-12-PQ-3104', capacityTons: 6.0, originCity: 'Goregaon East', destinationCity: 'Kurla Yard', availableDate: 'Available Tomorrow', ratePerKm: 42, driverName: 'Suresh Kumar', driverPhone: '+91 97182 39102', status: 'available', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() },
+      { id: 'trk_3', truckName: 'Ashok Leyland Boss 4.5T EV Container', vehicleReg: 'MH-43-BB-9182', capacityTons: 4.5, originCity: 'Thane West', destinationCity: 'Taloja MIDC', availableDate: 'Available Today', ratePerKm: 36, driverName: 'Vikram Singh', driverPhone: '+91 98334 19283', status: 'in_transit', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() }
+    ]
+  });
+});
+
+app.post('/api/v1/trucks', async (req, res) => {
+  const {
+    truckName,
+    vehicleReg,
+    capacityTons,
+    originCity,
+    destinationCity,
+    availableDate,
+    ratePerKm,
+    driverName,
+    driverPhone,
+    createdBy,
+    companyName,
+    companyEmail
+  } = req.body;
+
+  if (!truckName || !vehicleReg || !originCity || !destinationCity) {
+    return res.status(400).json({ error: 'Truck Name, Vehicle Registration, Origin City, and Destination City are required.' });
+  }
+
+  if (!createdBy || !companyName) {
+    return res.status(401).json({ error: 'Sign in with a registered Logistics Carrier account before listing a truck.' });
+  }
+
+  const cleanCap = Math.max(0.5, Number(capacityTons) || 1);
+  const cleanRate = Math.max(0, Number(ratePerKm) || 0);
+
+  const newTruck = {
+    id: `trk_${Date.now()}`,
+    truckName,
+    vehicleReg,
+    capacityTons: cleanCap,
+    originCity,
+    destinationCity,
+    availableDate: availableDate || 'Available Now',
+    ratePerKm: cleanRate,
+    driverName: driverName || 'Assigned Carrier Driver',
+    driverPhone: driverPhone || '+91 98000 00000',
+    status: 'available',
+    createdBy,
+    companyName,
+    companyEmail: companyEmail || 'dispatch@logistics.com',
+    createdAt: new Date().toISOString()
+  };
+
+  const client = getNeonClient();
+  if (client) {
+    try {
+      await client`
+        INSERT INTO trucks (
+          id, truck_name, vehicle_reg, capacity_tons, origin_city, destination_city, available_date, rate_per_km, driver_name, driver_phone, status, created_by, company_name, company_email, created_at
+        ) VALUES (
+          ${newTruck.id}, ${newTruck.truckName}, ${newTruck.vehicleReg}, ${newTruck.capacityTons},
+          ${newTruck.originCity}, ${newTruck.destinationCity}, ${newTruck.availableDate}, ${newTruck.ratePerKm},
+          ${newTruck.driverName}, ${newTruck.driverPhone}, ${newTruck.status}, ${newTruck.createdBy},
+          ${newTruck.companyName}, ${newTruck.companyEmail}, ${newTruck.createdAt}
+        )
+      `;
+    } catch (err) {
+      console.error('[Neon DB Truck Insert Error]:', err.message);
+    }
+  }
+
+  console.log(`[API] New Truck Listed by @${newTruck.createdBy} (${newTruck.companyName}): Reg ${newTruck.vehicleReg} - ${newTruck.truckName}`);
+
+  res.status(201).json({
+    status: 'success',
+    message: 'Truck listed successfully on Logistics Carrier Network!',
+    data: newTruck
+  });
+});
+
+app.delete('/api/v1/trucks/:id', async (req, res) => {
+  const { username } = req.body || {};
+  const client = getNeonClient();
+  if (client) {
+    try {
+      await client`DELETE FROM trucks WHERE id = ${req.params.id}`;
+      return res.json({ status: 'success', message: 'Truck listing deleted.' });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+  res.json({ status: 'success', message: 'Truck listing deleted.' });
 });
 
 export default app;
