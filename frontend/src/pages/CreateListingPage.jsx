@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import MaterialScanner from '../components/ai-grader/MaterialScanner';
+import LocationPicker from '../components/common/LocationPicker';
 import { calculateAvoidedCarbon } from '../utils/carbonEngine';
 import { PlusCircle, MapPin, CheckCircle, Leaf, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -17,12 +18,39 @@ export default function CreateListingPage({ setActiveTab }) {
   const [location, setLocation] = useState('Warehouse District, Sector 4');
   const [description, setDescription] = useState('');
   const [scannedImage, setScannedImage] = useState(null);
+  const [deviceLocation, setDeviceLocation] = useState(null);
+  const [pickupCoordinates, setPickupCoordinates] = useState(null);
+  const [pickupLocationSet, setPickupLocationSet] = useState(false);
+  const [locationStatus, setLocationStatus] = useState('loading');
 
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
   const carbon = calculateAvoidedCarbon(materialType, quantity, 15, grade);
+
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationStatus('unsupported');
+      return;
+    }
+    setLocationStatus('loading');
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        const currentLocation = { lat: position.coords.latitude, lon: position.coords.longitude };
+        setDeviceLocation(currentLocation);
+        setPickupCoordinates(currentLocation);
+        setPickupLocationSet(false);
+        setLocationStatus('ready');
+      },
+      () => setLocationStatus('denied'),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+    );
+  };
+
+  useEffect(() => {
+    requestLocation();
+  }, []);
 
   const handleAIScanResult = (res) => {
     if (res.isPackaging === false) {
@@ -45,6 +73,11 @@ export default function CreateListingPage({ setActiveTab }) {
       setErrorMsg('Please sign in before posting a material so buyers can contact you and you can manage inquiries.');
       return;
     }
+    if (!pickupLocationSet || !pickupCoordinates || !Number.isFinite(Number(pickupCoordinates.lat)) || !Number.isFinite(Number(pickupCoordinates.lon))) {
+      setErrorMsg('Click “Set location and return to site” after choosing the exact pickup point.');
+      requestLocation();
+      return;
+    }
     const cleanQuantity = Math.max(1, Number(quantity) || 1);
     const cleanPrice = Math.max(0, Number(price) || 0);
 
@@ -64,8 +97,8 @@ export default function CreateListingPage({ setActiveTab }) {
       grade,
       price: cleanPrice,
       location,
-      lat: 19.08,
-      lon: 72.88,
+      lat: Number(pickupCoordinates.lat),
+      lon: Number(pickupCoordinates.lon),
       description: description || `Verified Grade ${grade} ${materialType} circular scrap lot ready for B2B pickup.`,
       image: scannedImage,
       createdBy: currentUser?.username,
@@ -133,6 +166,17 @@ export default function CreateListingPage({ setActiveTab }) {
           ⚠️ {errorMsg}
         </div>
       )}
+
+      <LocationPicker
+        location={location}
+        setLocation={setLocation}
+        coordinates={pickupCoordinates}
+        setCoordinates={setPickupCoordinates}
+        status={locationStatus}
+        onUseCurrentLocation={requestLocation}
+        onSetLocation={() => setPickupLocationSet(true)}
+        onLocationChange={() => setPickupLocationSet(false)}
+      />
 
       <form onSubmit={handleSubmit} style={{ background: 'white', padding: '32px', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}>
         <div style={{ marginBottom: '20px' }}>
@@ -218,17 +262,6 @@ export default function CreateListingPage({ setActiveTab }) {
               }}
             />
           </div>
-        </div>
-
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', fontWeight: '600', fontSize: '0.9rem', marginBottom: '6px' }}>Warehouse Pickup Location</label>
-          <input
-            type="text"
-            placeholder="e.g. Warehouse District, Sector 4, Mumbai"
-            style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.95rem' }}
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-          />
         </div>
 
         <div style={{ marginBottom: '20px' }}>

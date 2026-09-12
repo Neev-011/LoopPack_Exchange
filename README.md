@@ -104,6 +104,8 @@ npm install
 npm run dev
 ```
 
+The material and logistics forms use Leaflet with free OpenStreetMap tiles. Users can click the exact place or drag the pin, press **Set selected pin location**, and the latitude and longitude fields update automatically. They can also use the free browser Geolocation API for their current position. No Google Maps API key or billing is required.
+
 ---
 
 ## 🐘 Neon Database Integration

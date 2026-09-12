@@ -22,6 +22,7 @@ import {
   Leaf
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import LocationPicker from '../components/common/LocationPicker';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
 
@@ -38,6 +39,11 @@ export default function EcoLogisticsPage({ setActiveTab }) {
   const [ratePerKm, setRatePerKm] = useState(32);
   const [driverName, setDriverName] = useState('Ramesh Sharma');
   const [driverPhone, setDriverPhone] = useState('+91 98201 48291');
+  const [deviceLocation, setDeviceLocation] = useState(null);
+  const [locationStatus, setLocationStatus] = useState('idle');
+  const [activeTruckId, setActiveTruckId] = useState(null);
+  const [originCoordinates, setOriginCoordinates] = useState(null);
+  const [originLocationSet, setOriginLocationSet] = useState(false);
 
   // Page & Solver State
   const [listedTrucks, setListedTrucks] = useState([]);
@@ -52,6 +58,36 @@ export default function EcoLogisticsPage({ setActiveTab }) {
 
   const isLogisticsUser = currentUser?.role === 'logistics';
 
+  useEffect(() => {
+    if (!isLogisticsUser) return undefined;
+    if (!navigator.geolocation) {
+      setLocationStatus('unsupported');
+      return undefined;
+    }
+    setLocationStatus('loading');
+    const watchId = navigator.geolocation.watchPosition(
+      position => {
+        const currentLocation = { lat: position.coords.latitude, lon: position.coords.longitude };
+        setDeviceLocation(currentLocation);
+        setOriginCoordinates(current => current || currentLocation);
+        setLocationStatus('ready');
+      },
+      () => setLocationStatus('denied'),
+      { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [isLogisticsUser]);
+
+  useEffect(() => {
+    if (!activeTruckId || !deviceLocation) return undefined;
+    fetch(`${API_BASE_URL}/trucks/${activeTruckId}/location`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(deviceLocation)
+    }).catch(() => {});
+    return undefined;
+  }, [activeTruckId, deviceLocation]);
+
   // Fetch listed trucks from Neon DB
   const fetchTrucks = async () => {
     setLoading(true);
@@ -61,6 +97,8 @@ export default function EcoLogisticsPage({ setActiveTab }) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
           setListedTrucks(json.data);
+          const ownedTruck = json.data.find(truck => truck.createdBy === currentUser?.username);
+          if (ownedTruck) setActiveTruckId(ownedTruck.id);
         }
       }
     } catch (err) {
@@ -116,6 +154,10 @@ export default function EcoLogisticsPage({ setActiveTab }) {
   const handleSubmitTruck = async (e) => {
     e.preventDefault();
     if (!isLogisticsUser) return;
+    if (!originLocationSet || !originCoordinates || !Number.isFinite(Number(originCoordinates.lat)) || !Number.isFinite(Number(originCoordinates.lon))) {
+      setErrorMsg('Click “Set location and return to site” after choosing the truck origin.');
+      return;
+    }
 
     setSubmitting(true);
     setErrorMsg(null);
@@ -132,7 +174,9 @@ export default function EcoLogisticsPage({ setActiveTab }) {
       driverPhone: driverPhone || '+91 98000 00000',
       createdBy: currentUser.username,
       companyName: currentUser.companyName,
-      companyEmail: currentUser.email
+      companyEmail: currentUser.email,
+      lat: Number(originCoordinates.lat),
+      lon: Number(originCoordinates.lon)
     };
 
     try {
@@ -149,6 +193,7 @@ export default function EcoLogisticsPage({ setActiveTab }) {
       setSuccessMsg(`Truck ${payload.vehicleReg} listed successfully on Neon DB Network!`);
       setTruckName('');
       setVehicleReg('');
+      setActiveTruckId(data.data?.id || null);
 
       await fetchTrucks();
 
@@ -295,6 +340,11 @@ export default function EcoLogisticsPage({ setActiveTab }) {
           ⚠️ {errorMsg}
         </div>
       )}
+
+      <div style={{ background: locationStatus === 'ready' ? '#ECFDF5' : '#FFF7ED', border: `1px solid ${locationStatus === 'ready' ? '#A7F3D0' : '#FED7AA'}`, color: locationStatus === 'ready' ? '#047857' : '#9A3412', padding: '14px', borderRadius: '10px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <Navigation size={17} />
+        {locationStatus === 'ready' ? `Live location tracking active (${deviceLocation.lat.toFixed(5)}, ${deviceLocation.lon.toFixed(5)}).` : locationStatus === 'loading' ? 'Starting live location tracking...' : locationStatus === 'denied' ? 'Location permission is required to list and track a truck.' : 'This browser does not support live location tracking.'}
+      </div>
 
       {/* GOOGLE OR-TOOLS & OSRM ROUTE OPTIMIZATION DASHBOARD */}
       {vrpSolution && (
@@ -469,15 +519,21 @@ export default function EcoLogisticsPage({ setActiveTab }) {
               />
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontWeight: '600', fontSize: '0.88rem', marginBottom: '6px', color: '#334155' }}>Origin City / Hub</label>
-              <input
-                type="text"
-                placeholder="e.g. Mahape, Navi Mumbai"
-                style={{ width: '100%', padding: '11px', borderRadius: '8px', border: '1px solid #CBD5E1', fontSize: '0.92rem' }}
-                value={originCity}
-                onChange={e => setOriginCity(e.target.value)}
-                required
+            <div style={{ gridColumn: '1 / -1' }}>
+              <LocationPicker
+                location={originCity}
+                setLocation={setOriginCity}
+                coordinates={originCoordinates}
+                setCoordinates={setOriginCoordinates}
+                status={locationStatus}
+                onUseCurrentLocation={() => {
+                  if (deviceLocation) {
+                    setOriginCoordinates(deviceLocation);
+                    setOriginLocationSet(false);
+                  }
+                }}
+                onSetLocation={() => setOriginLocationSet(true)}
+                onLocationChange={() => setOriginLocationSet(false)}
               />
             </div>
 

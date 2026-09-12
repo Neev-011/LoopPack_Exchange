@@ -6,6 +6,8 @@ import {
 import { calculateAvoidedCarbon } from '../utils/carbonEngine';
 import { useAuth } from '../context/AuthContext';
 import { calculateHaversineDistance } from '../utils/spatialMath';
+import LocationPicker from '../components/common/LocationPicker';
+import RouteMap from '../components/common/RouteMap';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
 
@@ -23,6 +25,14 @@ const LOGISTICS_HUB_COORDINATES = [
 function getHubCoordinates(location = '') {
   const normalized = location.toLowerCase();
   return LOGISTICS_HUB_COORDINATES.find(hub => normalized.includes(hub.match));
+}
+
+function getPoint(item, fallbackLocation = '') {
+  if (Number.isFinite(Number(item?.lat)) && Number.isFinite(Number(item?.lon))) {
+    return { lat: Number(item.lat), lon: Number(item.lon) };
+  }
+  const hub = getHubCoordinates(item?.location || item?.originCity || fallbackLocation);
+  return hub ? { lat: hub.lat, lon: hub.lon } : { lat: 19.076, lon: 72.8777 };
 }
 
 const MOCK_FALLBACK_LISTINGS = [
@@ -130,6 +140,9 @@ export default function MarketplacePage() {
   const [inquiryMessage, setInquiryMessage] = useState('');
   const [inquirySent, setInquirySent] = useState(false);
   const [orderDetails, setOrderDetails] = useState({ quantity: '', destination: '', paymentMethod: 'Cash on delivery' });
+  const [buyerCoordinates, setBuyerCoordinates] = useState(null);
+  const [buyerLocationSet, setBuyerLocationSet] = useState(false);
+  const [buyerLocationStatus, setBuyerLocationStatus] = useState('idle');
   const [orderError, setOrderError] = useState('');
   const [ordering, setOrdering] = useState(false);
   const [deviceLocation, setDeviceLocation] = useState(null);
@@ -152,7 +165,27 @@ export default function MarketplacePage() {
       destination: '',
       paymentMethod: 'Cash on delivery'
     });
+    setBuyerCoordinates(null);
+    setBuyerLocationSet(false);
+    setBuyerLocationStatus('idle');
   }, [selectedProduct?.id]);
+
+  const useBuyerLocation = () => {
+    if (!navigator.geolocation) {
+      setBuyerLocationStatus('unsupported');
+      return;
+    }
+    setBuyerLocationStatus('loading');
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        setBuyerCoordinates({ lat: position.coords.latitude, lon: position.coords.longitude });
+        setBuyerLocationStatus('ready');
+        setBuyerLocationSet(false);
+      },
+      () => setBuyerLocationStatus('denied'),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+    );
+  };
 
   useEffect(() => {
     if (!selectedProduct) return undefined;
@@ -219,6 +252,9 @@ export default function MarketplacePage() {
       .then(json => {
         const matches = (json.data || [])
           .map(truck => {
+            if (Number.isFinite(Number(truck.lat)) && Number.isFinite(Number(truck.lon))) {
+              return { ...truck, distanceKm: calculateHaversineDistance(deviceLocation.lat, deviceLocation.lon, Number(truck.lat), Number(truck.lon)) };
+            }
             const hub = getHubCoordinates(truck.originCity);
             if (!hub) return null;
             return { ...truck, distanceKm: calculateHaversineDistance(deviceLocation.lat, deviceLocation.lon, hub.lat, hub.lon) };
@@ -251,6 +287,10 @@ export default function MarketplacePage() {
       setOrderError('Select an empty-return truck before reserving material.');
       return;
     }
+    if (!buyerLocationSet || !buyerCoordinates) {
+      setOrderError('Set and confirm your delivery location before purchasing.');
+      return;
+    }
     setOrdering(true);
     setOrderError('');
     try {
@@ -267,6 +307,7 @@ export default function MarketplacePage() {
           },
           quantity: Number(orderDetails.quantity),
           destination: orderDetails.destination,
+          buyerLocation: buyerCoordinates,
           paymentMethod: orderDetails.paymentMethod,
           truck: selectedTruck
         })
@@ -275,9 +316,11 @@ export default function MarketplacePage() {
       if (!response.ok) throw new Error(data.error || 'Could not complete reservation.');
       setDbListings(current => current.filter(item => String(item.id) !== String(selectedProduct.id)));
       setSelectedProduct(null);
-      setClaimedItem({ ...selectedProduct, order: data.data, selectedTruck });
+      setClaimedItem({ ...selectedProduct, order: data.data, selectedTruck, buyerLocation: buyerCoordinates });
     } catch (error) {
-      setOrderError(error.message);
+      setOrderError(error instanceof TypeError && error.message === 'Failed to fetch'
+        ? 'Could not reach the reservation server. Make sure the backend is running on http://localhost:5001, then try again.'
+        : error.message || 'Could not complete reservation.');
     } finally {
       setOrdering(false);
     }
@@ -465,6 +508,14 @@ export default function MarketplacePage() {
             <div style={{ fontWeight: '700', fontSize: '1rem' }}>Pickup Order Reserved!</div>
             <div style={{ fontSize: '0.85rem', color: '#A7F3D0' }}>
               {claimedItem.selectedTruck.vehicle} ({claimedItem.selectedTruck.id}) assigned to {claimedItem.location} for {claimedItem.title}.
+            </div>
+            <div style={{ marginTop: '14px', background: 'white', padding: '12px', borderRadius: '9px', color: '#0F172A' }}>
+              <strong style={{ display: 'block', marginBottom: '8px' }}>Live route plan</strong>
+              <RouteMap stops={[
+                { ...getPoint(claimedItem.selectedTruck, claimedItem.selectedTruck.returnRoute), label: 'Logistics start', location: claimedItem.selectedTruck.returnRoute },
+                { ...getPoint(claimedItem, claimedItem.location), label: 'Seller pickup', location: claimedItem.location },
+                { lat: Number(claimedItem.buyerLocation.lat), lon: Number(claimedItem.buyerLocation.lon), label: 'Buyer delivery', location: claimedItem.order.destination }
+              ]} />
             </div>
           </div>
         </div>
@@ -817,6 +868,16 @@ export default function MarketplacePage() {
                   Delivery destination
                   <textarea required rows="2" value={orderDetails.destination} onChange={event => setOrderDetails({ ...orderDetails, destination: event.target.value })} placeholder="Full delivery address and contact details" style={{ width: '100%', padding: 9, marginTop: 4, border: '1px solid #CBD5E1', borderRadius: 6 }} />
                 </label>
+                <LocationPicker
+                  location={orderDetails.destination}
+                  setLocation={destination => setOrderDetails({ ...orderDetails, destination })}
+                  coordinates={buyerCoordinates}
+                  setCoordinates={setBuyerCoordinates}
+                  status={buyerLocationStatus}
+                  onUseCurrentLocation={useBuyerLocation}
+                  onSetLocation={() => setBuyerLocationSet(true)}
+                  onLocationChange={() => setBuyerLocationSet(false)}
+                />
                 <label style={{ display: 'block', color: '#334155', fontSize: 13 }}>
                   Payment method
                   <select value={orderDetails.paymentMethod} onChange={event => setOrderDetails({ ...orderDetails, paymentMethod: event.target.value })} style={{ width: '100%', padding: 9, marginTop: 4, border: '1px solid #CBD5E1', borderRadius: 6 }}>

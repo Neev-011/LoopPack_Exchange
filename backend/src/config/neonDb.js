@@ -137,12 +137,14 @@ export async function initNeonTables() {
         unit_price NUMERIC DEFAULT 0,
         total_price NUMERIC DEFAULT 0,
         destination TEXT NOT NULL,
+        buyer_location JSONB,
         payment_method VARCHAR(80) NOT NULL,
         status VARCHAR(40) DEFAULT 'completed',
         listing_snapshot JSONB NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
+    await client`ALTER TABLE sales_orders ADD COLUMN IF NOT EXISTS buyer_location JSONB`;
 
     // 4. Users Table
     await client`
@@ -178,9 +180,15 @@ export async function initNeonTables() {
         created_by VARCHAR(100) NOT NULL,
         company_name VARCHAR(255) NOT NULL,
         company_email VARCHAR(255),
+        lat NUMERIC,
+        lon NUMERIC,
+        location_updated_at TIMESTAMP WITH TIME ZONE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
+    await client`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS lat NUMERIC`;
+    await client`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS lon NUMERIC`;
+    await client`ALTER TABLE trucks ADD COLUMN IF NOT EXISTS location_updated_at TIMESTAMP WITH TIME ZONE`;
 
     isNeonConnected = true;
     console.log('[Neon DB] PostgreSQL tables (listings, inquiries, messages, sales_orders, users, trucks) verified/created successfully!');

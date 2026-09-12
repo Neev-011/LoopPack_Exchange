@@ -163,12 +163,17 @@ app.post('/api/v1/exchanges/completed', async (req, res) => {
 
 app.post('/api/v1/orders', async (req, res) => {
   try {
-    const { listingId, buyer, quantity, destination, paymentMethod } = req.body || {};
+    const { listingId, buyer, quantity, destination, paymentMethod, buyerLocation } = req.body || {};
     if (!buyer?.id || !buyer?.username || !buyer?.companyName || !buyer?.email) {
       return res.status(401).json({ error: 'Sign in with a complete buyer profile before reserving material.' });
     }
     if (!destination?.trim() || !paymentMethod?.trim()) {
       return res.status(400).json({ error: 'Destination and payment method are required.' });
+    }
+    const buyerLat = Number(buyerLocation?.lat);
+    const buyerLon = Number(buyerLocation?.lon);
+    if (!Number.isFinite(buyerLat) || !Number.isFinite(buyerLon) || buyerLat < -90 || buyerLat > 90 || buyerLon < -180 || buyerLon > 180) {
+      return res.status(400).json({ error: 'A valid buyer delivery latitude and longitude are required.' });
     }
     const client = getNeonClient();
     if (!client) return res.status(503).json({ error: 'Database is unavailable. The order was not created.' });
@@ -194,6 +199,7 @@ app.post('/api/v1/orders', async (req, res) => {
       unitPrice: Number(listing.price) || 0,
       totalPrice: (Number(listing.price) || 0) * requestedQuantity,
       destination: destination.trim(),
+      buyerLocation: { lat: buyerLat, lon: buyerLon },
       paymentMethod: paymentMethod.trim(),
       status: 'completed',
       listingSnapshot: listing
@@ -201,12 +207,12 @@ app.post('/api/v1/orders', async (req, res) => {
     await client`
       INSERT INTO sales_orders (
         id, listing_id, listing_title, seller_username, buyer_id, buyer_username, buyer_company,
-        buyer_email, quantity, unit, unit_price, total_price, destination, payment_method,
-        status, listing_snapshot
+        buyer_email, quantity, unit, unit_price, total_price, destination, buyer_location,
+        payment_method, status, listing_snapshot
       ) VALUES (
         ${order.id}, ${order.listingId}, ${order.listingTitle}, ${order.sellerUsername}, ${order.buyerId},
         ${order.buyerUsername}, ${order.buyerCompany}, ${order.buyerEmail}, ${order.quantity}, ${order.unit},
-        ${order.unitPrice}, ${order.totalPrice}, ${order.destination}, ${order.paymentMethod},
+        ${order.unitPrice}, ${order.totalPrice}, ${order.destination}, ${JSON.stringify(order.buyerLocation)}, ${order.paymentMethod},
         ${order.status}, ${JSON.stringify(order.listingSnapshot)}
       )
     `;
@@ -245,6 +251,7 @@ app.get('/api/v1/orders', async (req, res) => {
       buyerCompany: row.buyer_company, buyerEmail: row.buyer_email, quantity: Number(row.quantity),
       unit: row.unit, unitPrice: Number(row.unit_price), totalPrice: Number(row.total_price),
       destination: row.destination, paymentMethod: row.payment_method, status: row.status,
+      buyerLocation: row.buyer_location,
       listingSnapshot: row.listing_snapshot, createdAt: row.created_at
     })) });
   } catch (err) {
@@ -452,6 +459,10 @@ app.post('/api/v1/listings', async (req, res) => {
     return res.status(401).json({ error: 'Sign in before posting so you can manage your listing and buyer inquiries.' });
   }
 
+  if (!Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon)) || Number(lat) < -90 || Number(lat) > 90 || Number(lon) < -180 || Number(lon) > 180) {
+    return res.status(400).json({ error: 'A valid device latitude and longitude are required for proximity tracking.' });
+  }
+
   const numQty = Number(quantity);
   if (isNaN(numQty) || numQty <= 0) {
     return res.status(400).json({ error: 'Quantity must be a positive number greater than 0.' });
@@ -472,8 +483,8 @@ app.post('/api/v1/listings', async (req, res) => {
     unit: unit || (materialType === 'pallet' ? 'pallets' : materialType === 'hdpe' ? 'drums' : materialType === 'ldpe' ? 'kg' : 'boxes'),
     grade: grade || 'A',
     location: location || 'Warehouse Hub, Zone A',
-    lat: Number(lat) || 19.08,
-    lon: Number(lon) || 72.88,
+    lat: Number(lat),
+    lon: Number(lon),
     distanceKm: 5.0,
     price: Math.max(0, numPrice),
     isFree: numPrice === 0,
@@ -652,6 +663,9 @@ app.get('/api/v1/trucks', async (req, res) => {
         createdBy: r.created_by,
         companyName: r.company_name,
         companyEmail: r.company_email,
+        lat: Number(r.lat),
+        lon: Number(r.lon),
+        locationUpdatedAt: r.location_updated_at,
         createdAt: r.created_at
       }));
       return res.json({ total: data.length, data });
@@ -684,10 +698,12 @@ app.post('/api/v1/trucks', async (req, res) => {
     driverPhone,
     createdBy,
     companyName,
-    companyEmail
+    companyEmail,
+    lat,
+    lon
   } = req.body;
 
-  if (!truckName || !vehicleReg || !originCity || !destinationCity) {
+  if (!truckName || !vehicleReg || !originCity || !destinationCity || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lon))) {
     return res.status(400).json({ error: 'Truck Name, Vehicle Registration, Origin City, and Destination City are required.' });
   }
 
@@ -713,6 +729,9 @@ app.post('/api/v1/trucks', async (req, res) => {
     createdBy,
     companyName,
     companyEmail: companyEmail || 'dispatch@logistics.com',
+    lat: Number(lat),
+    lon: Number(lon),
+    locationUpdatedAt: new Date().toISOString(),
     createdAt: new Date().toISOString()
   };
 
@@ -721,12 +740,12 @@ app.post('/api/v1/trucks', async (req, res) => {
     try {
       await client`
         INSERT INTO trucks (
-          id, truck_name, vehicle_reg, capacity_tons, origin_city, destination_city, available_date, rate_per_km, driver_name, driver_phone, status, created_by, company_name, company_email, created_at
+          id, truck_name, vehicle_reg, capacity_tons, origin_city, destination_city, available_date, rate_per_km, driver_name, driver_phone, status, created_by, company_name, company_email, lat, lon, location_updated_at, created_at
         ) VALUES (
           ${newTruck.id}, ${newTruck.truckName}, ${newTruck.vehicleReg}, ${newTruck.capacityTons},
           ${newTruck.originCity}, ${newTruck.destinationCity}, ${newTruck.availableDate}, ${newTruck.ratePerKm},
           ${newTruck.driverName}, ${newTruck.driverPhone}, ${newTruck.status}, ${newTruck.createdBy},
-          ${newTruck.companyName}, ${newTruck.companyEmail}, ${newTruck.createdAt}
+          ${newTruck.companyName}, ${newTruck.companyEmail}, ${newTruck.lat}, ${newTruck.lon}, ${newTruck.locationUpdatedAt}, ${newTruck.createdAt}
         )
       `;
     } catch (err) {
@@ -741,6 +760,28 @@ app.post('/api/v1/trucks', async (req, res) => {
     message: 'Truck listed successfully on Logistics Carrier Network!',
     data: newTruck
   });
+});
+
+app.patch('/api/v1/trucks/:id/location', async (req, res) => {
+  const lat = Number(req.body?.lat);
+  const lon = Number(req.body?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+    return res.status(400).json({ error: 'Valid latitude and longitude are required.' });
+  }
+  const client = getNeonClient();
+  if (!client) return res.status(503).json({ error: 'Database is unavailable. Location was not updated.' });
+  try {
+    const updatedAt = new Date().toISOString();
+    const rows = await client`
+      UPDATE trucks SET lat = ${lat}, lon = ${lon}, location_updated_at = ${updatedAt}
+      WHERE id = ${req.params.id}
+      RETURNING id, lat, lon, location_updated_at
+    `;
+    if (!rows.length) return res.status(404).json({ error: 'Truck listing not found.' });
+    res.json({ status: 'success', data: rows[0] });
+  } catch (err) {
+    res.status(500).json({ error: `Unable to update truck location: ${err.message}` });
+  }
 });
 
 app.delete('/api/v1/trucks/:id', async (req, res) => {
