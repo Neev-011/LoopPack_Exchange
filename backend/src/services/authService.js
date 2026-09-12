@@ -26,8 +26,12 @@ function readLocalUsers() {
 }
 
 function saveLocalUsers(users) {
-  fs.mkdirSync(path.dirname(USERS_FILE), { recursive: true });
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+  try {
+    fs.mkdirSync(path.dirname(USERS_FILE), { recursive: true });
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[AuthService] Local user save failed:', err.message);
+  }
 }
 
 function fromRow(row) {
@@ -53,28 +57,39 @@ function validatePassword(password) {
 async function readUsers() {
   const client = getNeonClient();
   if (client) {
-    const rows = await client`SELECT * FROM users ORDER BY created_at ASC`;
-    return rows.map(fromRow);
+    try {
+      const rows = await client`SELECT * FROM users ORDER BY created_at ASC`;
+      if (Array.isArray(rows) && rows.length > 0) {
+        return rows.map(fromRow);
+      }
+    } catch (err) {
+      console.warn('[Neon DB Users Read Error, using local fallback]:', err.message);
+    }
   }
   return readLocalUsers();
 }
 
 async function saveUser(user) {
-  const client = getNeonClient();
-  if (client) {
-    await client`
-      INSERT INTO users (id, username, company_name, email, password, role, role_label, industry, security_question, security_answer, created_at)
-      VALUES (${user.id}, ${user.username}, ${user.companyName}, ${user.email}, ${user.password}, ${user.role}, ${user.roleLabel}, ${user.industry}, ${user.securityQuestion || ''}, ${user.securityAnswer || ''}, ${user.createdAt || new Date().toISOString()})
-      ON CONFLICT (id) DO UPDATE SET company_name=EXCLUDED.company_name, email=EXCLUDED.email, password=EXCLUDED.password,
-        role=EXCLUDED.role, role_label=EXCLUDED.role_label, industry=EXCLUDED.industry,
-        security_question=EXCLUDED.security_question, security_answer=EXCLUDED.security_answer
-    `;
-    return;
-  }
+  // Always save to local JSON file first so users are guaranteed persisted
   const users = readLocalUsers();
   const index = users.findIndex(item => item.id === user.id);
   if (index === -1) users.push(user); else users[index] = user;
   saveLocalUsers(users);
+
+  const client = getNeonClient();
+  if (client) {
+    try {
+      await client`
+        INSERT INTO users (id, username, company_name, email, password, role, role_label, industry, security_question, security_answer, created_at)
+        VALUES (${user.id}, ${user.username}, ${user.companyName}, ${user.email}, ${user.password}, ${user.role}, ${user.roleLabel}, ${user.industry}, ${user.securityQuestion || ''}, ${user.securityAnswer || ''}, ${user.createdAt || new Date().toISOString()})
+        ON CONFLICT (id) DO UPDATE SET company_name=EXCLUDED.company_name, email=EXCLUDED.email, password=EXCLUDED.password,
+          role=EXCLUDED.role, role_label=EXCLUDED.role_label, industry=EXCLUDED.industry,
+          security_question=EXCLUDED.security_question, security_answer=EXCLUDED.security_answer
+      `;
+    } catch (err) {
+      console.warn('[Neon DB User Save Error]:', err.message);
+    }
+  }
 }
 
 export async function getAllDemoUsers() {

@@ -148,11 +148,11 @@ export default function MarketplacePage() {
     };
   }, [selectedProduct]);
 
-  // Fetch live database listings from Neon PostgreSQL
-  const fetchListings = async () => {
+  // Fetch live database listings from Neon PostgreSQL with PostGIS Spatial Distance Radius
+  const fetchListings = async (radius = maxRadius) => {
     setRefreshing(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/listings`);
+      const res = await fetch(`${API_BASE_URL}/listings?radiusKm=${radius}&lat=19.076&lon=72.877`);
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
@@ -167,13 +167,14 @@ export default function MarketplacePage() {
   };
 
   useEffect(() => {
-    fetchListings();
-  }, []);
+    fetchListings(maxRadius);
+  }, [maxRadius]);
 
   const filteredListings = useMemo(() => {
     return dbListings.filter(item => {
       const matchType = filterType === 'all' || item.materialType === filterType;
-      const matchRadius = (item.distanceKm || 5) <= maxRadius;
+      const itemDist = typeof item.distanceKm === 'number' ? item.distanceKm : 5;
+      const matchRadius = maxRadius >= 100 || itemDist <= maxRadius;
       return matchType && matchRadius;
     });
   }, [dbListings, filterType, maxRadius]);
@@ -261,30 +262,57 @@ export default function MarketplacePage() {
           </p>
         </div>
 
-        {/* Search Radius Slider */}
+        {/* Search Radius Slider & Distance Preset Buttons */}
         <div style={{
           background: 'white',
-          padding: '10px 18px',
-          borderRadius: '10px',
-          border: '1px solid #E2E8F0',
+          padding: '10px 16px',
+          borderRadius: '12px',
+          border: '1px solid #CBD5E1',
           display: 'flex',
           alignItems: 'center',
-          gap: '12px'
+          gap: '14px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          flexWrap: 'wrap'
         }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: '600', color: '#475569' }}>
-              Distance Radius: <strong style={{ color: '#0F5132' }}>{maxRadius} km</strong>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <MapPin size={16} color="#10B981" />
+            <span style={{ fontSize: '0.86rem', fontWeight: '700', color: '#0F172A' }}>
+              Distance Radius: <strong style={{ color: '#059669', fontSize: '0.95rem' }}>{maxRadius >= 100 ? '100+ km (All)' : `${maxRadius} km`}</strong>
             </span>
-            <input
-              type="range"
-              min="5"
-              max="50"
-              step="5"
-              value={maxRadius}
-              onChange={(e) => setMaxRadius(Number(e.target.value))}
-              style={{ width: '120px', accentColor: '#10B981', cursor: 'pointer' }}
-            />
+          </div>
+
+          <input
+            type="range"
+            min="5"
+            max="100"
+            step="5"
+            value={maxRadius}
+            onChange={(e) => setMaxRadius(Number(e.target.value))}
+            style={{ width: '130px', accentColor: '#10B981', cursor: 'pointer' }}
+          />
+
+          <div style={{ display: 'flex', gap: '4px' }}>
+            {[5, 15, 25, 50, 100].map((r) => (
+              <button
+                key={r}
+                onClick={() => setMaxRadius(r)}
+                style={{
+                  padding: '3px 9px',
+                  borderRadius: '6px',
+                  border: maxRadius === r ? '1px solid #10B981' : '1px solid #E2E8F0',
+                  background: maxRadius === r ? '#ECFDF5' : '#F8FAFC',
+                  color: maxRadius === r ? '#047857' : '#64748B',
+                  fontWeight: '700',
+                  fontSize: '0.76rem',
+                  cursor: 'pointer'
+                }}
+              >
+                {r >= 100 ? 'All' : `${r}km`}
+              </button>
+            ))}
           </div>
         </div>
+      </div>
 
       {/* Category Filter Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
@@ -350,10 +378,30 @@ export default function MarketplacePage() {
 
       {/* Full Width Material Cards Grid */}
       {filteredListings.length === 0 ? (
-        <div style={{ background: 'white', padding: '48px', borderRadius: '12px', textAlign: 'center', border: '1px solid #E2E8F0' }}>
-          <Package size={44} color="#94A3B8" style={{ marginBottom: '12px' }} />
-          <h3 style={{ fontSize: '1.15rem', color: '#0F172A', marginBottom: '6px' }}>No packaging lots within {maxRadius} km</h3>
-          <p style={{ color: '#64748B', fontSize: '0.9rem' }}>Try expanding the distance radius slider above.</p>
+        <div style={{ background: 'white', padding: '48px 24px', borderRadius: '14px', textAlign: 'center', border: '1px solid #E2E8F0', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' }}>
+          <Package size={48} color="#94A3B8" style={{ marginBottom: '12px' }} />
+          <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#0F172A', marginBottom: '8px' }}>
+            No material lots found within {maxRadius >= 100 ? '100+ km' : `${maxRadius} km`}
+          </h3>
+          <p style={{ color: '#64748B', fontSize: '0.92rem', maxWidth: '480px', margin: '0 auto 20px' }}>
+            There are currently no circular packaging listings matching your criteria within this distance radius.
+          </p>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setMaxRadius(50)}
+              className="btn-primary"
+              style={{ padding: '9px 18px', fontSize: '0.88rem' }}
+            >
+              Expand Search Radius to 50 km
+            </button>
+            <button
+              onClick={() => setMaxRadius(100)}
+              className="btn-secondary"
+              style={{ padding: '9px 18px', fontSize: '0.88rem' }}
+            >
+              Show All Locations (100+ km)
+            </button>
+          </div>
         </div>
       ) : (
         <div className="cards-grid">
