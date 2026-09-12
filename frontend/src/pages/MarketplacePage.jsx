@@ -13,6 +13,8 @@ import { materialWeightTons } from '../services/logisticsMatchingService';
 import AddressForm from '../components/common/AddressForm';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
+const HIDDEN_SELLER_EMAILS = new Set(['jeel@gmail.com', 'n@gmail.com']);
+const HIDDEN_SELLER_USERNAMES = new Set(['jeel']);
 
 const LOGISTICS_HUB_COORDINATES = [
   { match: 'mahape', lat: 19.115, lon: 73.015 },
@@ -42,73 +44,6 @@ function formatAddress(address) {
   return [address?.streetArea, address?.landmark, address?.city, address?.state].filter(Boolean).join(', ');
 }
 
-const MOCK_FALLBACK_LISTINGS = [
-  {
-    id: 1,
-    title: '500x Standard Heavy-Duty Corrugated Boxes',
-    materialType: 'cardboard',
-    quantity: 500,
-    unit: 'boxes',
-    grade: 'A',
-    location: 'Warehouse District, Sector 4, Mumbai',
-    distanceKm: 4.2,
-    price: 15,
-    isFree: false,
-    aiVerified: true,
-    verificationStatus: 'AI Verified',
-    description: 'Once-used heavy duty 5-ply shipping boxes from electronics imports. Clean condition, zero oil or moisture damage.',
-    image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'
-  },
-  {
-    id: 2,
-    title: '120x Heavy Wooden Euro Pallets (EPAL-1)',
-    materialType: 'pallet',
-    quantity: 120,
-    unit: 'pallets',
-    grade: 'A',
-    location: 'Logistics Park, Hub 2, Thane',
-    distanceKm: 8.5,
-    price: 250,
-    isFree: false,
-    aiVerified: false,
-    verificationStatus: 'Seller Direct',
-    description: 'Heat-treated ISPM 15 compliant Euro pallets. Suitable for high-density rack storage and international freight.',
-    image: 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?auto=format&fit=crop&w=600&q=80'
-  },
-  {
-    id: 3,
-    title: '800kg LDPE Commercial Stretch Wrap Scrap',
-    materialType: 'ldpe',
-    quantity: 800,
-    unit: 'kg',
-    grade: 'B',
-    location: 'Retail Distribution Hub, Navi Mumbai',
-    distanceKm: 12.0,
-    price: 0,
-    isFree: true,
-    aiVerified: true,
-    verificationStatus: 'AI Verified',
-    description: 'Clear pallet stretch wrap baled into 100kg bales. Free pickup offered for instant clearance.',
-    image: 'https://images.unsplash.com/photo-1605600659908-0ef719419d41?auto=format&fit=crop&w=600&q=80'
-  },
-  {
-    id: 4,
-    title: '45x HDPE 200L Industrial Chemical Drums',
-    materialType: 'hdpe',
-    quantity: 45,
-    unit: 'drums',
-    grade: 'B',
-    location: 'Chemical Industrial Zone, Taloja',
-    distanceKm: 18.3,
-    price: 450,
-    isFree: false,
-    aiVerified: false,
-    verificationStatus: 'Seller Direct',
-    description: 'Triple-rinsed food grade high-density polyethylene blue drums with tight head caps.',
-    image: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80'
-  }
-];
-
 function normalizeListing(listing) {
   const isVerified = listing.aiVerified !== undefined && listing.aiVerified !== null
     ? Boolean(listing.aiVerified)
@@ -121,6 +56,12 @@ function normalizeListing(listing) {
     aiVerified: isVerified,
     verificationStatus: listing.verificationStatus || listing.verification_status || (isVerified ? 'AI Verified' : 'Seller Direct')
   };
+}
+
+function isVisibleListing(listing) {
+  const email = String(listing.createdByEmail || listing.created_by_email || '').trim().toLowerCase();
+  const username = String(listing.createdBy || listing.created_by || '').trim().toLowerCase();
+  return !HIDDEN_SELLER_EMAILS.has(email) && !HIDDEN_SELLER_USERNAMES.has(username);
 }
 
 function formatVehicleAvailability(date, time) {
@@ -141,7 +82,7 @@ function formatVehicleAvailability(date, time) {
 
 export default function MarketplacePage() {
   const { currentUser } = useAuth();
-  const [dbListings, setDbListings] = useState(() => MOCK_FALLBACK_LISTINGS.map(normalizeListing));
+  const [dbListings, setDbListings] = useState([]);
   const [filterType, setFilterType] = useState('all');
   const [maxRadius, setMaxRadius] = useState(25);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -241,7 +182,7 @@ export default function MarketplacePage() {
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
-          setDbListings(json.data.map(normalizeListing));
+          setDbListings(json.data.map(normalizeListing).filter(isVisibleListing));
         }
       }
     } catch (err) {

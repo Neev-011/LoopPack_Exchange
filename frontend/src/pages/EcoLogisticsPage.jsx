@@ -25,7 +25,8 @@ import { useAuth } from '../context/AuthContext';
 import LocationPicker from '../components/common/LocationPicker';
 import AddressForm from '../components/common/AddressForm';
 
-const API_BASE_URL = 'http://localhost:5001/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+  || `${window.location.protocol}//${window.location.hostname}:5001/api/v1`;
 
 function getTodayDate() {
   const today = new Date();
@@ -507,6 +508,23 @@ export default function EcoLogisticsPage({ setActiveTab }) {
             <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px' }}>
               <h4 style={{ margin: '0 0 12px', color: '#0F172A' }}>Pickup Address</h4>
               <AddressForm value={pickupAddress} onChange={setPickupAddress} idPrefix="pickup-address" required />
+              <div style={{ marginTop: '14px' }}>
+                <LocationPicker
+                  location={`${pickupAddress.streetArea}, ${pickupAddress.city}, ${pickupAddress.state}`}
+                  setLocation={value => setPickupAddress(current => ({ ...current, streetArea: value }))}
+                  coordinates={originCoordinates}
+                  setCoordinates={setOriginCoordinates}
+                  status={locationStatus}
+                  onUseCurrentLocation={() => {
+                    if (deviceLocation) {
+                      setOriginCoordinates(deviceLocation);
+                      setOriginLocationSet(false);
+                    }
+                  }}
+                  onSetLocation={() => setOriginLocationSet(true)}
+                  onLocationChange={() => setOriginLocationSet(false)}
+                />
+              </div>
             </div>
             <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px' }}>
               <h4 style={{ margin: '0 0 12px', color: '#0F172A' }}>Delivery Address</h4>
