@@ -267,9 +267,44 @@ app.post('/api/v1/auth/change-password', (req, res) => {
   }
 });
 
+// Async helper to read listings directly from Neon PostgreSQL if connected
+async function fetchDatabaseAsync() {
+  const client = getNeonClient();
+  if (client) {
+    try {
+      const rows = await client`SELECT * FROM listings ORDER BY created_at DESC`;
+      if (rows && rows.length > 0) {
+        return rows.map(r => ({
+          id: isNaN(Number(r.id)) ? r.id : Number(r.id),
+          title: r.title,
+          materialType: r.material_type,
+          quantity: Number(r.quantity),
+          unit: r.unit,
+          grade: r.grade,
+          location: r.location,
+          lat: Number(r.lat) || 19.08,
+          lon: Number(r.lon) || 72.88,
+          distanceKm: 5.0,
+          price: Number(r.price) || 0,
+          isFree: Boolean(r.is_free),
+          description: r.description,
+          image: r.image,
+          createdBy: r.created_by,
+          companyName: r.company_name,
+          ownerRole: r.owner_role,
+          createdAt: r.created_at
+        }));
+      }
+    } catch (err) {
+      console.error('[Neon DB Async Read Error]:', err.message);
+    }
+  }
+  return readDatabase();
+}
+
 // 3. Fetch Listings (Spatial / Filtered / Multi-User Owned)
-app.get('/api/v1/listings', (req, res) => {
-  const listings = readDatabase();
+app.get('/api/v1/listings', async (req, res) => {
+  const listings = await fetchDatabaseAsync();
   const lat = parseFloat(req.query.lat) || 19.076;
   const lon = parseFloat(req.query.lon) || 72.877;
   const radius = parseFloat(req.query.radiusKm) || 50;
