@@ -13,7 +13,9 @@ import {
   ChevronDown,
   Sparkles,
   PackageCheck,
-  ShoppingBag
+  ShoppingBag,
+  Menu,
+  X
 } from 'lucide-react';
 import Logo from './Logo';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +23,7 @@ import { useAuth } from '../../context/AuthContext';
 export default function Navbar({ activeTab, setActiveTab }) {
   const { currentUser, logout } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const dropdownRef = useRef(null);
 
   // Close dropdown when clicking outside
@@ -39,6 +42,7 @@ export default function Navbar({ activeTab, setActiveTab }) {
   const handleNavClick = (tab) => {
     setActiveTab(tab);
     setDropdownOpen(false);
+    setMobileMenuOpen(false);
   };
 
   return (
@@ -47,8 +51,8 @@ export default function Navbar({ activeTab, setActiveTab }) {
         <Logo variant="horizontal" height={36} theme="light" />
       </div>
 
-      {/* Primary Navigation Links */}
-      <div className="nav-links">
+      {/* Primary Desktop Navigation Links */}
+      <div className="nav-links nav-links-desktop">
         <button
           className={`nav-link ${activeTab === 'landing' ? 'active' : ''}`}
           onClick={() => handleNavClick('landing')}
@@ -86,8 +90,15 @@ export default function Navbar({ activeTab, setActiveTab }) {
         </button>
       </div>
 
-      {/* Right Controls & User Account Menu */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', position: 'relative' }}>
+      {/* Right Controls & Mobile Hamburger Toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', position: 'relative' }}>
+        <button
+          className="mobile-hamburger-btn"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label="Toggle navigation menu"
+        >
+          {mobileMenuOpen ? <X size={24} color="#0F172A" /> : <Menu size={24} color="#0F172A" />}
+        </button>
         {currentUser ? (
           /* USER LOGGED IN - DROPDOWN MENU */
           <div ref={dropdownRef} style={{ position: 'relative' }}>
@@ -312,6 +323,44 @@ export default function Navbar({ activeTab, setActiveTab }) {
           </button>
         )}
       </div>
+
+      {/* MOBILE NAVIGATION DRAWER OVERLAY */}
+      {mobileMenuOpen && (
+        <div className="mobile-nav-drawer">
+          <button
+            className={`nav-link ${activeTab === 'landing' ? 'active' : ''}`}
+            onClick={() => handleNavClick('landing')}
+          >
+            Overview
+          </button>
+          <button
+            className={`nav-link ${activeTab === 'marketplace' ? 'active' : ''}`}
+            onClick={() => handleNavClick('marketplace')}
+          >
+            <Store size={18} /> Geo-Marketplace
+          </button>
+          <button
+            className={`nav-link ${activeTab === 'create-listing' ? 'active' : ''}`}
+            onClick={() => handleNavClick('create-listing')}
+          >
+            <Sparkles size={18} /> AI Scanner & List
+          </button>
+          {currentUser?.role === 'logistics' && (
+            <button
+              className={`nav-link ${activeTab === 'logistics' ? 'active' : ''}`}
+              onClick={() => handleNavClick('logistics')}
+            >
+              <Route size={18} /> Eco-Logistics
+            </button>
+          )}
+          <button
+            className={`nav-link ${activeTab === 'carbon' ? 'active' : ''}`}
+            onClick={() => handleNavClick('carbon')}
+          >
+            <Leaf size={18} /> Carbon ESG Engine
+          </button>
+        </div>
+      )}
     </nav>
   );
 }

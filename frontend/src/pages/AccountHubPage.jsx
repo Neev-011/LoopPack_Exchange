@@ -158,7 +158,7 @@ export default function AccountHubPage({ view = 'materials', setActiveTab }) {
     <div style={{ maxWidth: 1000, margin: '0 auto' }}>
       {/* Account Hub Navigation Tabs */}
       {setActiveTab && (
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        <div className="responsive-tabs-bar" style={{ gap: '10px', marginBottom: '24px' }}>
           <button
             onClick={() => setActiveTab('account')}
             style={{

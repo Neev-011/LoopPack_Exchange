@@ -280,7 +280,7 @@ export default function CreateListingPage({ setActiveTab }) {
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        <div className="responsive-grid-2" style={{ marginBottom: '20px' }}>
           <div>
             <label style={{ display: 'block', fontWeight: '600', fontSize: '0.9rem', marginBottom: '6px' }}>Packaging Material Type</label>
             <select
@@ -309,7 +309,7 @@ export default function CreateListingPage({ setActiveTab }) {
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+        <div className="responsive-grid-3" style={{ marginBottom: '20px' }}>
           <div>
             <label style={{ display: 'block', fontWeight: '600', fontSize: '0.9rem', marginBottom: '6px' }}>Quantity</label>
             <input
