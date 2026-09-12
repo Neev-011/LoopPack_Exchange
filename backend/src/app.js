@@ -90,10 +90,25 @@ app.patch('/api/v1/listings/:id', async (req, res) => {
   if (!req.body?.username || listings[index].createdBy !== req.body.username) {
     return res.status(403).json({ error: 'Only the listing owner can edit this listing.' });
   }
+
+  if (req.body.quantity !== undefined) {
+    const q = Number(req.body.quantity);
+    if (isNaN(q) || q <= 0) {
+      return res.status(400).json({ error: 'Quantity must be a positive number greater than 0.' });
+    }
+  }
+
+  if (req.body.price !== undefined) {
+    const p = Number(req.body.price);
+    if (isNaN(p) || p < 0) {
+      return res.status(400).json({ error: 'Price cannot be a negative number.' });
+    }
+  }
+
   const editable = ['title', 'quantity', 'unit', 'grade', 'price', 'location', 'description'];
   editable.forEach(field => {
     if (req.body[field] !== undefined) listings[index][field] = field === 'quantity' || field === 'price'
-      ? Number(req.body[field])
+      ? Math.max(field === 'quantity' ? 1 : 0, Number(req.body[field]))
       : req.body[field];
   });
   listings[index].isFree = Number(listings[index].price) === 0;
@@ -121,6 +136,83 @@ app.post('/api/v1/inquiries/:id/messages', async (req, res) => {
     res.status(201).json({ status: 'success', data: message });
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
+  }
+});
+
+app.post('/api/v1/orders', async (req, res) => {
+  try {
+    const { listingId, buyer, quantity, destination, paymentMethod } = req.body || {};
+    if (!buyer?.id || !buyer?.username || !buyer?.companyName || !buyer?.email) {
+      return res.status(401).json({ error: 'Sign in with a complete buyer profile before reserving material.' });
+    }
+    if (!destination?.trim() || !paymentMethod?.trim()) {
+      return res.status(400).json({ error: 'Destination and payment method are required.' });
+    }
+    const client = getNeonClient();
+    if (!client) return res.status(503).json({ error: 'Database is unavailable. The order was not created.' });
+    const rows = await client`SELECT * FROM listings WHERE id = ${String(listingId)} LIMIT 1`;
+    if (!rows.length) return res.status(404).json({ error: 'This material is no longer available.' });
+    const listing = rows[0];
+    if (listing.created_by === buyer.username) return res.status(400).json({ error: 'You cannot purchase your own listing.' });
+    const requestedQuantity = Number(quantity);
+    if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0 || requestedQuantity > Number(listing.quantity)) {
+      return res.status(400).json({ error: `Quantity must be between 1 and ${listing.quantity}.` });
+    }
+    const order = {
+      id: `ord_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      listingId: String(listing.id),
+      listingTitle: listing.title,
+      sellerUsername: listing.created_by,
+      buyerId: buyer.id,
+      buyerUsername: buyer.username,
+      buyerCompany: buyer.companyName,
+      buyerEmail: buyer.email,
+      quantity: requestedQuantity,
+      unit: listing.unit,
+      unitPrice: Number(listing.price) || 0,
+      totalPrice: (Number(listing.price) || 0) * requestedQuantity,
+      destination: destination.trim(),
+      paymentMethod: paymentMethod.trim(),
+      status: 'completed',
+      listingSnapshot: listing
+    };
+    await client`
+      INSERT INTO sales_orders (
+        id, listing_id, listing_title, seller_username, buyer_id, buyer_username, buyer_company,
+        buyer_email, quantity, unit, unit_price, total_price, destination, payment_method,
+        status, listing_snapshot
+      ) VALUES (
+        ${order.id}, ${order.listingId}, ${order.listingTitle}, ${order.sellerUsername}, ${order.buyerId},
+        ${order.buyerUsername}, ${order.buyerCompany}, ${order.buyerEmail}, ${order.quantity}, ${order.unit},
+        ${order.unitPrice}, ${order.totalPrice}, ${order.destination}, ${order.paymentMethod},
+        ${order.status}, ${JSON.stringify(order.listingSnapshot)}
+      )
+    `;
+    await client`DELETE FROM listings WHERE id = ${order.listingId}`;
+    res.status(201).json({ status: 'success', data: order });
+  } catch (err) {
+    console.error('[Orders] checkout failed:', err.message);
+    res.status(500).json({ error: 'Could not complete this reservation. Please try again.' });
+  }
+});
+
+app.get('/api/v1/orders', async (req, res) => {
+  try {
+    const username = req.query.username;
+    if (!username) return res.status(401).json({ error: 'A signed-in user is required.' });
+    const client = getNeonClient();
+    if (!client) return res.json({ data: [] });
+    const rows = await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`;
+    res.json({ data: rows.map(row => ({
+      id: row.id, listingId: row.listing_id, listingTitle: row.listing_title,
+      sellerUsername: row.seller_username, buyerId: row.buyer_id, buyerUsername: row.buyer_username,
+      buyerCompany: row.buyer_company, buyerEmail: row.buyer_email, quantity: Number(row.quantity),
+      unit: row.unit, unitPrice: Number(row.unit_price), totalPrice: Number(row.total_price),
+      destination: row.destination, paymentMethod: row.payment_method, status: row.status,
+      listingSnapshot: row.listing_snapshot, createdAt: row.created_at
+    })) });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not load completed sales.' });
   }
 });
 
@@ -324,21 +416,31 @@ app.post('/api/v1/listings', async (req, res) => {
     return res.status(401).json({ error: 'Sign in before posting so you can manage your listing and buyer inquiries.' });
   }
 
+  const numQty = Number(quantity);
+  if (isNaN(numQty) || numQty <= 0) {
+    return res.status(400).json({ error: 'Quantity must be a positive number greater than 0.' });
+  }
+
+  const numPrice = Number(price);
+  if (isNaN(numPrice) || numPrice < 0) {
+    return res.status(400).json({ error: 'Price cannot be a negative number.' });
+  }
+
   const listings = await getListings();
 
   const newListing = {
     id: Date.now(),
     title,
     materialType: materialType || 'cardboard',
-    quantity: Number(quantity) || 100,
+    quantity: numQty,
     unit: unit || (materialType === 'pallet' ? 'pallets' : materialType === 'hdpe' ? 'drums' : materialType === 'ldpe' ? 'kg' : 'boxes'),
     grade: grade || 'A',
     location: location || 'Warehouse Hub, Zone A',
     lat: Number(lat) || 19.08,
     lon: Number(lon) || 72.88,
     distanceKm: 5.0,
-    price: Number(price) || 0,
-    isFree: Number(price) === 0,
+    price: Math.max(0, numPrice),
+    isFree: numPrice === 0,
     description: description || 'Verified circular packaging material lot.',
     createdBy,
     companyName,
@@ -402,11 +504,134 @@ app.post('/api/v1/carbon/calculate', (req, res) => {
   res.json(result);
 });
 
-// 6. Eco-Logistics Route Optimization
-app.post('/api/v1/logistics/optimize-route', async (req, res) => {
-  const listings = await getListings();
-  const route = solveOptimizedBackhaulRoute(listings);
-  res.json(route);
+// 7. Logistics Fleet Truck Endpoints
+app.get('/api/v1/trucks', async (req, res) => {
+  const client = getNeonClient();
+  if (client) {
+    try {
+      const owner = req.query.owner;
+      const rows = owner
+        ? await client`SELECT * FROM trucks WHERE created_by = ${owner} ORDER BY created_at DESC`
+        : await client`SELECT * FROM trucks ORDER BY created_at DESC`;
+
+      const data = rows.map(r => ({
+        id: r.id,
+        truckName: r.truck_name,
+        vehicleReg: r.vehicle_reg,
+        capacityTons: Number(r.capacity_tons),
+        originCity: r.origin_city,
+        destinationCity: r.destination_city,
+        availableDate: r.available_date,
+        ratePerKm: Number(r.rate_per_km),
+        driverName: r.driver_name,
+        driverPhone: r.driver_phone,
+        status: r.status,
+        createdBy: r.created_by,
+        companyName: r.company_name,
+        companyEmail: r.company_email,
+        createdAt: r.created_at
+      }));
+      return res.json({ total: data.length, data });
+    } catch (err) {
+      console.error('[Neon DB Trucks Read Error]:', err.message);
+    }
+  }
+
+  // Fallback preset trucks
+  res.json({
+    total: 3,
+    data: [
+      { id: 'trk_1', truckName: 'Tata 407 2.5T EV Container', vehicleReg: 'MH-04-FK-8492', capacityTons: 2.5, originCity: 'Mahape, Navi Mumbai', destinationCity: 'Bhiwandi Gateway', availableDate: 'Available Today', ratePerKm: 28, driverName: 'Ramesh Sharma', driverPhone: '+91 98201 48291', status: 'available', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() },
+      { id: 'trk_2', truckName: 'Eicher 11.10 6.0T High Deck CNG', vehicleReg: 'MH-12-PQ-3104', capacityTons: 6.0, originCity: 'Goregaon East', destinationCity: 'Kurla Yard', availableDate: 'Available Tomorrow', ratePerKm: 42, driverName: 'Suresh Kumar', driverPhone: '+91 97182 39102', status: 'available', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() },
+      { id: 'trk_3', truckName: 'Ashok Leyland Boss 4.5T EV Container', vehicleReg: 'MH-43-BB-9182', capacityTons: 4.5, originCity: 'Thane West', destinationCity: 'Taloja MIDC', availableDate: 'Available Today', ratePerKm: 36, driverName: 'Vikram Singh', driverPhone: '+91 98334 19283', status: 'in_transit', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() }
+    ]
+  });
+});
+
+app.post('/api/v1/trucks', async (req, res) => {
+  const {
+    truckName,
+    vehicleReg,
+    capacityTons,
+    originCity,
+    destinationCity,
+    availableDate,
+    ratePerKm,
+    driverName,
+    driverPhone,
+    createdBy,
+    companyName,
+    companyEmail
+  } = req.body;
+
+  if (!truckName || !vehicleReg || !originCity || !destinationCity) {
+    return res.status(400).json({ error: 'Truck Name, Vehicle Registration, Origin City, and Destination City are required.' });
+  }
+
+  if (!createdBy || !companyName) {
+    return res.status(401).json({ error: 'Sign in with a registered Logistics Carrier account before listing a truck.' });
+  }
+
+  const cleanCap = Math.max(0.5, Number(capacityTons) || 1);
+  const cleanRate = Math.max(0, Number(ratePerKm) || 0);
+
+  const newTruck = {
+    id: `trk_${Date.now()}`,
+    truckName,
+    vehicleReg,
+    capacityTons: cleanCap,
+    originCity,
+    destinationCity,
+    availableDate: availableDate || 'Available Now',
+    ratePerKm: cleanRate,
+    driverName: driverName || 'Assigned Carrier Driver',
+    driverPhone: driverPhone || '+91 98000 00000',
+    status: 'available',
+    createdBy,
+    companyName,
+    companyEmail: companyEmail || 'dispatch@logistics.com',
+    createdAt: new Date().toISOString()
+  };
+
+  const client = getNeonClient();
+  if (client) {
+    try {
+      await client`
+        INSERT INTO trucks (
+          id, truck_name, vehicle_reg, capacity_tons, origin_city, destination_city, available_date, rate_per_km, driver_name, driver_phone, status, created_by, company_name, company_email, created_at
+        ) VALUES (
+          ${newTruck.id}, ${newTruck.truckName}, ${newTruck.vehicleReg}, ${newTruck.capacityTons},
+          ${newTruck.originCity}, ${newTruck.destinationCity}, ${newTruck.availableDate}, ${newTruck.ratePerKm},
+          ${newTruck.driverName}, ${newTruck.driverPhone}, ${newTruck.status}, ${newTruck.createdBy},
+          ${newTruck.companyName}, ${newTruck.companyEmail}, ${newTruck.createdAt}
+        )
+      `;
+    } catch (err) {
+      console.error('[Neon DB Truck Insert Error]:', err.message);
+    }
+  }
+
+  console.log(`[API] New Truck Listed by @${newTruck.createdBy} (${newTruck.companyName}): Reg ${newTruck.vehicleReg} - ${newTruck.truckName}`);
+
+  res.status(201).json({
+    status: 'success',
+    message: 'Truck listed successfully on Logistics Carrier Network!',
+    data: newTruck
+  });
+});
+
+app.delete('/api/v1/trucks/:id', async (req, res) => {
+  const { username } = req.body || {};
+  const client = getNeonClient();
+  if (client) {
+    try {
+      await client`DELETE FROM trucks WHERE id = ${req.params.id}`;
+      return res.json({ status: 'success', message: 'Truck listing deleted.' });
+    } catch (err) {
+      return res.status(500).json({ error: err.message });
+    }
+  }
+  res.json({ status: 'success', message: 'Truck listing deleted.' });
 });
 
 export default app;
