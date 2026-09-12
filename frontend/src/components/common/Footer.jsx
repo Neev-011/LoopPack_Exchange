@@ -1,13 +1,12 @@
 import React from 'react';
-import { RefreshCw, Award, Github } from 'lucide-react';
+import { Award, Github } from 'lucide-react';
+import Logo from './Logo';
 
 export default function Footer() {
   return (
     <footer className="footer">
       <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'white', fontWeight: '700', fontSize: '1.1rem' }}>
-          <RefreshCw size={20} color="#10B981" /> LoopPack Exchange
-        </div>
+        <Logo variant="horizontal" height={34} theme="dark" />
         <p style={{ color: '#94A3B8', fontSize: '0.88rem', maxWidth: '600px' }}>
           B2B Circular Packaging & Materials Exchange Platform with Eco-Logistics & Embodied Carbon Tracking. Developed for HackOut'26 — Team One (Jeel Aghera, Neev Katharotiya, Kashyap Saniyara, Tatsav Gangani).
         </p>

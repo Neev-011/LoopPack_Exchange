@@ -1,16 +1,12 @@
 import React from 'react';
-import { RefreshCw, Store, PlusCircle, Route, Leaf, ShieldCheck } from 'lucide-react';
+import { Store, PlusCircle, Route, Leaf, ShieldCheck } from 'lucide-react';
+import Logo from './Logo';
 
 export default function Navbar({ activeTab, setActiveTab }) {
   return (
     <nav className="navbar">
       <div className="nav-brand" onClick={() => setActiveTab('landing')} style={{ cursor: 'pointer' }}>
-        <div className="brand-logo">
-          <RefreshCw size={22} />
-        </div>
-        <div className="brand-title">
-          LoopPack <span>Exchange</span>
-        </div>
+        <Logo variant="horizontal" height={36} theme="light" />
       </div>
 
       <div className="nav-links">

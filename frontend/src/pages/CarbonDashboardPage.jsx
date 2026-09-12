@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Leaf, Award, Download, ShieldCheck, CheckCircle2, TreeDeciduous, Car, Factory } from 'lucide-react';
+import { Leaf, Award, Download, ShieldCheck, CheckCircle2, TreeDeciduous, Car, Factory, FileCheck } from 'lucide-react';
 import { calculateAvoidedCarbon } from '../utils/carbonEngine';
+import { generateESGCertificatePDF } from '../utils/esgCertificateGenerator';
 
 export default function CarbonDashboardPage() {
   const [downloading, setDownloading] = useState(false);
+  const [downloadSuccess, setDownloadSuccess] = useState(null);
 
   // Sample cumulative platform numbers
   const totalCardboard = calculateAvoidedCarbon('cardboard', 12500, 15, 'A');
@@ -18,10 +20,50 @@ export default function CarbonDashboardPage() {
 
   const handleDownloadCertificate = () => {
     setDownloading(true);
+    setDownloadSuccess(null);
+
     setTimeout(() => {
-      setDownloading(false);
-      alert('Scope 3 ESG Compliance Certificate (ISO 14044 PDF) generated and downloaded successfully!');
-    }, 1500);
+      try {
+        const streams = [
+          {
+            name: 'Corrugated Cardboard (12,500 units)',
+            virgin: `+${totalCardboard.eVirgin.toLocaleString()} kg`,
+            rep: `-${totalCardboard.eReprocessing.toLocaleString()} kg`,
+            freight: `-${totalCardboard.eTransport.toLocaleString()} kg`,
+            net: `${totalCardboard.netCO2eAvoided.toLocaleString()} kg`
+          },
+          {
+            name: 'Euro Wooden Pallets (3,200 units)',
+            virgin: `+${totalPallets.eVirgin.toLocaleString()} kg`,
+            rep: `-${totalPallets.eReprocessing.toLocaleString()} kg`,
+            freight: `-${totalPallets.eTransport.toLocaleString()} kg`,
+            net: `${totalPallets.netCO2eAvoided.toLocaleString()} kg`
+          },
+          {
+            name: 'HDPE Chemical Drums (1,400 units)',
+            virgin: `+${totalHDPE.eVirgin.toLocaleString()} kg`,
+            rep: `-${totalHDPE.eReprocessing.toLocaleString()} kg`,
+            freight: `-${totalHDPE.eTransport.toLocaleString()} kg`,
+            net: `${totalHDPE.netCO2eAvoided.toLocaleString()} kg`
+          }
+        ];
+
+        const filename = generateESGCertificatePDF({
+          streams,
+          grandTotalNetCO2e,
+          issuedTo: 'LoopPack Enterprise B2B Network'
+        });
+
+        setDownloadSuccess({
+          filename,
+          time: new Date().toLocaleTimeString()
+        });
+      } catch (err) {
+        console.error('Failed to generate audited ESG certificate PDF:', err);
+      } finally {
+        setDownloading(false);
+      }
+    }, 800);
   };
 
   return (
@@ -40,6 +82,41 @@ export default function CarbonDashboardPage() {
           <Download size={18} /> {downloading ? 'Generating Audit PDF...' : 'Download Audited ESG Certificate'}
         </button>
       </div>
+
+      {downloadSuccess && (
+        <div style={{
+          background: '#ECFDF5',
+          border: '1px solid #10B981',
+          borderRadius: '12px',
+          padding: '16px 20px',
+          marginBottom: '24px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          color: '#065F46',
+          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.15)',
+          animation: 'fadeIn 0.3s ease-in-out'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <FileCheck size={24} color="#059669" />
+            <div>
+              <div style={{ fontWeight: '700', fontSize: '1rem', color: '#065F46' }}>
+                ISO 14044 Audited ESG Certificate Generated & Downloaded!
+              </div>
+              <div style={{ fontSize: '0.88rem', color: '#047857', marginTop: '2px' }}>
+                Saved as <strong style={{ textDecoration: 'underline' }}>{downloadSuccess.filename}</strong> to your computer's <strong>Downloads</strong> folder at {downloadSuccess.time}.
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setDownloadSuccess(null)}
+            style={{ background: 'none', border: 'none', color: '#059669', cursor: 'pointer', fontWeight: 'bold', fontSize: '1.2rem', padding: '4px 8px' }}
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Main Carbon Highlights Banner */}
       <div style={{ background: 'linear-gradient(135deg, #0F5132 0%, #047857 100%)', color: 'white', padding: '36px', borderRadius: '16px', marginBottom: '32px', boxShadow: '0 10px 25px rgba(15, 81, 50, 0.2)' }}>
