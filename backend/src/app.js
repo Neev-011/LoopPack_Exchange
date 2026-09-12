@@ -51,9 +51,9 @@ function requestUser(req) {
   };
 }
 
-app.post('/api/v1/inquiries', (req, res) => {
+app.post('/api/v1/inquiries', async (req, res) => {
   try {
-    const inquiry = createInquiry({
+    const inquiry = await createInquiry({
       listing: req.body?.listing,
       buyer: requestUser(req),
       message: req.body?.message,
@@ -65,18 +65,18 @@ app.post('/api/v1/inquiries', (req, res) => {
   }
 });
 
-app.get('/api/v1/inquiries', (req, res) => {
+app.get('/api/v1/inquiries', async (req, res) => {
   try {
     const user = { id: req.query.userId, username: req.query.username, companyName: req.query.companyName };
-    res.json({ data: getInquiriesForUser(user, req.query.role === 'seller' ? 'seller' : 'buyer') });
+    res.json({ data: await getInquiriesForUser(user, req.query.role === 'seller' ? 'seller' : 'buyer') });
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
   }
 });
 
-app.patch('/api/v1/inquiries/:id', (req, res) => {
+app.patch('/api/v1/inquiries/:id', async (req, res) => {
   try {
-    const item = updateInquiryStatus(req.params.id, requestUser(req), req.body?.status);
+    const item = await updateInquiryStatus(req.params.id, requestUser(req), req.body?.status);
     res.json({ status: 'success', data: item });
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
@@ -106,18 +106,18 @@ app.patch('/api/v1/listings/:id', async (req, res) => {
   }
 });
 
-app.get('/api/v1/inquiries/:id/messages', (req, res) => {
+app.get('/api/v1/inquiries/:id/messages', async (req, res) => {
   try {
     const user = { id: req.query.userId, username: req.query.username, companyName: req.query.companyName };
-    res.json({ data: getMessages(req.params.id, user) });
+    res.json({ data: await getMessages(req.params.id, user) });
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
   }
 });
 
-app.post('/api/v1/inquiries/:id/messages', (req, res) => {
+app.post('/api/v1/inquiries/:id/messages', async (req, res) => {
   try {
-    const message = sendMessage(req.params.id, requestUser(req), req.body?.body);
+    const message = await sendMessage(req.params.id, requestUser(req), req.body?.body);
     res.status(201).json({ status: 'success', data: message });
   } catch (err) {
     res.status(err.statusCode || 400).json({ error: err.message });
@@ -218,63 +218,63 @@ app.get('/api/v1/health', async (req, res) => {
 });
 
 // 2. Auth Endpoints
-app.get('/api/v1/auth/demo-users', (req, res) => {
-  res.json({ status: 'success', data: getAllDemoUsers() });
+app.get('/api/v1/auth/demo-users', async (req, res) => {
+  res.json({ status: 'success', data: await getAllDemoUsers() });
 });
 
-app.post('/api/v1/auth/check-username', (req, res) => {
-  const result = checkUsername(req.body?.username);
+app.post('/api/v1/auth/check-username', async (req, res) => {
+  const result = await checkUsername(req.body?.username);
   res.json(result);
 });
 
-app.post('/api/v1/auth/login', (req, res) => {
+app.post('/api/v1/auth/login', async (req, res) => {
   try {
-    const user = authenticateUser(req.body);
+    const user = await authenticateUser(req.body);
     res.json({ status: 'success', user });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.post('/api/v1/auth/register', (req, res) => {
+app.post('/api/v1/auth/register', async (req, res) => {
   try {
-    const user = registerUser(req.body);
+    const user = await registerUser(req.body);
     res.status(201).json({ status: 'success', user });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.post('/api/v1/auth/forgot-password', (req, res) => {
+app.post('/api/v1/auth/forgot-password', async (req, res) => {
   try {
-    const user = resetPassword(req.body);
+    const user = await resetPassword(req.body);
     res.json({ status: 'success', message: 'Password updated successfully. You are now logged in.', user });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.post('/api/v1/auth/forgot-username', (req, res) => {
+app.post('/api/v1/auth/forgot-username', async (req, res) => {
   try {
-    const result = recoverUsername(req.body);
+    const result = await recoverUsername(req.body);
     res.json({ status: 'success', data: result });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.patch('/api/v1/auth/profile', (req, res) => {
+app.patch('/api/v1/auth/profile', async (req, res) => {
   try {
-    const user = updateUserProfile(req.body);
+    const user = await updateUserProfile(req.body);
     res.json({ status: 'success', user });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-app.post('/api/v1/auth/change-password', (req, res) => {
+app.post('/api/v1/auth/change-password', async (req, res) => {
   try {
-    const user = changeUserPassword(req.body);
+    const user = await changeUserPassword(req.body);
     res.json({ status: 'success', user, message: 'Password changed successfully.' });
   } catch (err) {
     res.status(400).json({ error: err.message });

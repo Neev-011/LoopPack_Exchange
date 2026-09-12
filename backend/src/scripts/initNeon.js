@@ -56,9 +56,23 @@ async function main() {
       message TEXT,
       quantity NUMERIC,
       status VARCHAR(50) DEFAULT 'new',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE
+    )
+  `;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS messages (
+      id VARCHAR(80) PRIMARY KEY,
+      inquiry_id VARCHAR(64) NOT NULL,
+      sender_id VARCHAR(64) NOT NULL,
+      sender_username VARCHAR(100) NOT NULL,
+      sender_company VARCHAR(255) NOT NULL,
+      body TEXT NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )
   `;
+  await sql`ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS users (
@@ -120,6 +134,34 @@ async function main() {
       }
       console.log(`✅ Migrated ${listingsData.length} material listings into Neon Postgres!`);
     }
+  }
+
+  const inquiriesFile = path.join(__dirname, '../../data/inquiries.json');
+  if (fs.existsSync(inquiriesFile)) {
+    const inquiriesData = JSON.parse(fs.readFileSync(inquiriesFile, 'utf8') || '[]');
+    for (const item of inquiriesData) {
+      await sql`
+        INSERT INTO inquiries (id, listing_id, listing_title, buyer_id, buyer_username, buyer_company, seller_username, message, quantity, status, created_at, updated_at)
+        VALUES (${item.id}, ${String(item.listingId)}, ${item.listingTitle || ''}, ${item.buyerId}, ${item.buyerUsername},
+          ${item.buyerCompanyName || ''}, ${item.sellerUsername}, ${item.message || ''}, ${item.quantity || 0},
+          ${item.status || 'new'}, ${item.createdAt || new Date().toISOString()}, ${item.updatedAt || null})
+        ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, updated_at = EXCLUDED.updated_at
+      `;
+    }
+    console.log(`Migrated ${inquiriesData.length} inquiries into Neon Postgres.`);
+  }
+
+  const messagesFile = path.join(__dirname, '../../data/messages.json');
+  if (fs.existsSync(messagesFile)) {
+    const messagesData = JSON.parse(fs.readFileSync(messagesFile, 'utf8') || '[]');
+    for (const item of messagesData) {
+      await sql`
+        INSERT INTO messages (id, inquiry_id, sender_id, sender_username, sender_company, body, created_at)
+        VALUES (${item.id}, ${item.inquiryId}, ${item.senderId}, ${item.senderUsername}, ${item.senderCompanyName || ''}, ${item.body}, ${item.createdAt || new Date().toISOString()})
+        ON CONFLICT (id) DO NOTHING
+      `;
+    }
+    console.log(`Migrated ${messagesData.length} messages into Neon Postgres.`);
   }
 
   // Verification

@@ -102,11 +102,25 @@ export async function initNeonTables() {
         message TEXT,
         quantity NUMERIC,
         status VARCHAR(50) DEFAULT 'new',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP WITH TIME ZONE
+      )
+    `;
+    await client`ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE`;
+
+    await client`
+      CREATE TABLE IF NOT EXISTS messages (
+        id VARCHAR(80) PRIMARY KEY,
+        inquiry_id VARCHAR(64) NOT NULL,
+        sender_id VARCHAR(64) NOT NULL,
+        sender_username VARCHAR(100) NOT NULL,
+        sender_company VARCHAR(255) NOT NULL,
+        body TEXT NOT NULL,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
 
-    // 3. Users Table
+    // 4. Users Table
     await client`
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(64) PRIMARY KEY,
@@ -124,7 +138,7 @@ export async function initNeonTables() {
     `;
 
     isNeonConnected = true;
-    console.log('[Neon DB] PostgreSQL tables (listings, inquiries, users) verified/created successfully!');
+    console.log('[Neon DB] PostgreSQL tables (listings, inquiries, messages, users) verified/created successfully!');
     return true;
   } catch (err) {
     console.error('[Neon DB] Table initialization error:', err.message);
