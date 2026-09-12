@@ -25,6 +25,26 @@ export default function CreateListingPage({ setActiveTab }) {
 
   const carbon = calculateAvoidedCarbon(materialType, quantity, 15, grade);
 
+  if (currentUser?.role === 'logistics') {
+    return (
+      <div style={{ maxWidth: '720px', margin: '40px auto', background: 'white', padding: '36px', borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 4px 14px rgba(0,0,0,0.05)', textAlign: 'center' }}>
+        <h3 style={{ fontSize: '1.4rem', color: '#0F172A', fontWeight: '800', marginBottom: '12px' }}>
+          🚚 Logistics Partner Account Active
+        </h3>
+        <p style={{ color: '#64748B', fontSize: '0.96rem', marginBottom: '24px', lineHeight: 1.5 }}>
+          Material listing and packaging sales are reserved for Buyer & Supplier Organizations. As a Logistics Carrier, you can manage your fleet, backhaul trips, and route optimizations in the Eco-Logistics Carrier Hub.
+        </p>
+        <button
+          className="btn-primary"
+          onClick={() => setActiveTab('logistics')}
+          style={{ padding: '12px 24px', fontSize: '1rem' }}
+        >
+          Go to Eco-Logistics Carrier Hub
+        </button>
+      </div>
+    );
+  }
+
   const handleAIScanResult = (res) => {
     if (!res || res.isPackaging === false) {
       if (res && res.image) setScannedImage(res.image);

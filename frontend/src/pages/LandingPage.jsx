@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Store, PlusCircle, ArrowRight, ShieldCheck, Leaf, RefreshCw, Route, Camera, Activity } from 'lucide-react';
+import { Store, PlusCircle, ArrowRight, ShieldCheck, Leaf, RefreshCw, Route, Camera, Activity, Truck } from 'lucide-react';
 import { calculateAvoidedCarbon } from '../utils/carbonEngine';
+import { useAuth } from '../context/AuthContext';
 
 const API_BASE_URL = 'http://localhost:5001/api/v1';
 
 export default function LandingPage({ setActiveTab }) {
+  const { currentUser } = useAuth();
   const [liveMetrics, setLiveMetrics] = useState({
     totalTonsDiverted: '14.8',
     totalCO2eAvoidedTons: '18.7',
@@ -102,12 +104,25 @@ export default function LandingPage({ setActiveTab }) {
         </p>
 
         <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
-          <button className="btn-primary" style={{ padding: '12px 24px', fontSize: '0.95rem' }} onClick={() => setActiveTab('marketplace')}>
-            <Store size={18} /> Open Marketplace ({liveMetrics.activeLotsCount} Active Lots)
-          </button>
-          <button className="btn-secondary" style={{ padding: '12px 24px', fontSize: '0.95rem' }} onClick={() => setActiveTab('create-listing')}>
-            <Camera size={18} /> Scan & Post Packaging
-          </button>
+          {currentUser?.role === 'logistics' ? (
+            <>
+              <button className="btn-primary" style={{ padding: '12px 24px', fontSize: '0.95rem' }} onClick={() => setActiveTab('logistics')}>
+                <Truck size={18} /> Open Eco-Logistics Carrier Hub
+              </button>
+              <button className="btn-secondary" style={{ padding: '12px 24px', fontSize: '0.95rem' }} onClick={() => setActiveTab('carbon')}>
+                <Leaf size={18} /> View Carbon ESG Engine
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn-primary" style={{ padding: '12px 24px', fontSize: '0.95rem' }} onClick={() => setActiveTab('marketplace')}>
+                <Store size={18} /> Open Marketplace ({liveMetrics.activeLotsCount} Active Lots)
+              </button>
+              <button className="btn-secondary" style={{ padding: '12px 24px', fontSize: '0.95rem' }} onClick={() => setActiveTab('create-listing')}>
+                <Camera size={18} /> Scan & Post Packaging
+              </button>
+            </>
+          )}
         </div>
       </div>
 
