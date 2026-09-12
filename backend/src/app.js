@@ -9,6 +9,7 @@ import { isNeonConnected, getNeonClient } from './config/neonDb.js';
 import { detectMaterialFromImage } from './services/imageDetectionService.js';
 import {
   createInquiry,
+  deleteInquiriesForListing,
   getInquiriesForUser,
   updateInquiryStatus,
   getMessages,
@@ -397,31 +398,53 @@ function readDatabase() {
   }
 }
 
+async function initDatabaseSchema() {
+  const client = getNeonClient();
+  if (client) {
+    try {
+      await client`ALTER TABLE listings ADD COLUMN IF NOT EXISTS ai_verified BOOLEAN DEFAULT false`;
+      await client`ALTER TABLE listings ADD COLUMN IF NOT EXISTS verification_status VARCHAR(50) DEFAULT 'Seller Direct'`;
+      console.log('[DB Schema] Verified ai_verified and verification_status columns in Neon PostgreSQL.');
+    } catch (err) {
+      console.warn('[DB Schema] Migration warning:', err.message);
+    }
+  }
+}
+initDatabaseSchema();
+
 async function getListings() {
   const client = getNeonClient();
   if (!client) return readDatabase();
 
   const rows = await client`SELECT * FROM listings ORDER BY created_at DESC`;
-  return rows.map(row => ({
-    id: row.id,
-    title: row.title,
-    materialType: row.material_type,
-    quantity: Number(row.quantity),
-    unit: row.unit,
-    grade: row.grade,
-    location: row.location,
-    lat: Number(row.lat),
-    lon: Number(row.lon),
-    price: Number(row.price),
-    isFree: row.is_free,
-    description: row.description,
-    image: row.image,
-    createdBy: row.created_by,
-    companyName: row.company_name,
-    ownerRole: row.owner_role,
-    createdByEmail: row.created_by_email || '',
-    createdAt: row.created_at
-  }));
+  return rows.map(row => {
+    const isVerified = row.ai_verified !== null && row.ai_verified !== undefined
+      ? Boolean(row.ai_verified)
+      : (row.aiVerified !== null && row.aiVerified !== undefined ? Boolean(row.aiVerified) : false);
+
+    return {
+      id: row.id,
+      title: row.title,
+      materialType: row.material_type,
+      quantity: Number(row.quantity),
+      unit: row.unit,
+      grade: row.grade,
+      location: row.location,
+      lat: Number(row.lat),
+      lon: Number(row.lon),
+      price: Number(row.price),
+      isFree: row.is_free,
+      description: row.description,
+      image: row.image,
+      createdBy: row.created_by,
+      companyName: row.company_name,
+      ownerRole: row.owner_role,
+      createdByEmail: row.created_by_email || '',
+      aiVerified: isVerified,
+      verificationStatus: row.verification_status || (isVerified ? 'AI Verified' : 'Seller Direct'),
+      createdAt: row.created_at
+    };
+  });
 }
 
 // Neon is the primary store when configured. JSON is only a local fallback.
@@ -429,22 +452,43 @@ async function saveDatabase(listings) {
   const client = getNeonClient();
   if (client) {
     for (const l of listings) {
-      await client`
-        INSERT INTO listings (
-          id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_by_email, created_at
-        ) VALUES (
-          ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade || 'A'},
-          ${l.location || ''}, ${l.lat || 19.08}, ${l.lon || 72.88}, ${l.price || 0}, ${l.isFree || false}, ${l.description || ''},
-          ${l.image || ''}, ${l.createdBy || 'anonymous'}, ${l.companyName || 'B2B Partner'}, ${l.ownerRole || 'Supplier'},
-          ${l.createdByEmail || ''}, ${l.createdAt || new Date().toISOString()}
-        )
-        ON CONFLICT (id) DO UPDATE SET
-          title = EXCLUDED.title, material_type = EXCLUDED.material_type, quantity = EXCLUDED.quantity,
-          unit = EXCLUDED.unit, grade = EXCLUDED.grade, location = EXCLUDED.location, lat = EXCLUDED.lat,
-          lon = EXCLUDED.lon, price = EXCLUDED.price, is_free = EXCLUDED.is_free, description = EXCLUDED.description,
-          image = EXCLUDED.image, created_by = EXCLUDED.created_by, company_name = EXCLUDED.company_name,
-          owner_role = EXCLUDED.owner_role, created_by_email = EXCLUDED.created_by_email
-      `;
+      try {
+        await client`
+          INSERT INTO listings (
+            id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_by_email, ai_verified, verification_status, created_at
+          ) VALUES (
+            ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade || 'A'},
+            ${l.location || ''}, ${l.lat || 19.08}, ${l.lon || 72.88}, ${l.price || 0}, ${l.isFree || false}, ${l.description || ''},
+            ${l.image || ''}, ${l.createdBy || 'anonymous'}, ${l.companyName || 'B2B Partner'}, ${l.ownerRole || 'Supplier'},
+            ${l.createdByEmail || ''}, ${Boolean(l.aiVerified)}, ${l.verificationStatus || (l.aiVerified ? 'AI Verified' : 'Seller Direct')}, ${l.createdAt || new Date().toISOString()}
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            title = EXCLUDED.title, material_type = EXCLUDED.material_type, quantity = EXCLUDED.quantity,
+            unit = EXCLUDED.unit, grade = EXCLUDED.grade, location = EXCLUDED.location, lat = EXCLUDED.lat,
+            lon = EXCLUDED.lon, price = EXCLUDED.price, is_free = EXCLUDED.is_free, description = EXCLUDED.description,
+            image = EXCLUDED.image, created_by = EXCLUDED.created_by, company_name = EXCLUDED.company_name,
+            owner_role = EXCLUDED.owner_role, created_by_email = EXCLUDED.created_by_email,
+            ai_verified = EXCLUDED.ai_verified, verification_status = EXCLUDED.verification_status
+        `;
+      } catch (dbErr) {
+        console.warn('[DB] SQL insert column fallback:', dbErr.message);
+        await client`
+          INSERT INTO listings (
+            id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_by_email, created_at
+          ) VALUES (
+            ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade || 'A'},
+            ${l.location || ''}, ${l.lat || 19.08}, ${l.lon || 72.88}, ${l.price || 0}, ${l.isFree || false}, ${l.description || ''},
+            ${l.image || ''}, ${l.createdBy || 'anonymous'}, ${l.companyName || 'B2B Partner'}, ${l.ownerRole || 'Supplier'},
+            ${l.createdByEmail || ''}, ${l.createdAt || new Date().toISOString()}
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            title = EXCLUDED.title, material_type = EXCLUDED.material_type, quantity = EXCLUDED.quantity,
+            unit = EXCLUDED.unit, grade = EXCLUDED.grade, location = EXCLUDED.location, lat = EXCLUDED.lat,
+            lon = EXCLUDED.lon, price = EXCLUDED.price, is_free = EXCLUDED.is_free, description = EXCLUDED.description,
+            image = EXCLUDED.image, created_by = EXCLUDED.created_by, company_name = EXCLUDED.company_name,
+            owner_role = EXCLUDED.owner_role, created_by_email = EXCLUDED.created_by_email
+        `;
+      }
     }
     return;
   }
@@ -616,6 +660,8 @@ app.post('/api/v1/listings', async (req, res) => {
     companyName,
     ownerRole: ownerRole || 'Buyer / Seller Organization',
     createdByEmail: createdByEmail || 'contact@looppack.io',
+    aiVerified: req.body.aiVerified !== undefined ? Boolean(req.body.aiVerified) : false,
+    verificationStatus: req.body.verificationStatus || (req.body.aiVerified ? 'AI Verified' : 'Seller Direct'),
     image: image || (materialType === 'pallet' 
       ? 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?auto=format&fit=crop&w=600&q=80'
       : materialType === 'hdpe'
@@ -655,15 +701,17 @@ app.delete('/api/v1/listings/:id', async (req, res) => {
     return res.status(403).json({ error: 'Only the listing owner can delete this listing.' });
   }
   const [deleted] = listings.splice(index, 1);
-  await saveDatabase(listings);
+  try {
+    await deleteInquiriesForListing(req.params.id);
+    await saveDatabase(listings);
 
-  const client = getNeonClient();
-  if (client) {
-    try {
+    const client = getNeonClient();
+    if (client) {
       await client`DELETE FROM listings WHERE id = ${String(req.params.id)}`;
-    } catch (e) {
-      console.error('[Neon DB Delete Error]:', e.message);
     }
+  } catch (error) {
+    console.error('[Listing delete failed]:', error.message);
+    return res.status(500).json({ error: 'The material could not be deleted completely. Please retry after checking the database connection.' });
   }
 
   console.log(`[API] Material listing deleted by @${req.body.username}: ID ${deleted.id}`);

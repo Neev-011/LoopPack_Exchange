@@ -609,7 +609,7 @@ export default function EcoLogisticsPage({ setActiveTab }) {
         </h3>
 
         <form onSubmit={handleSubmitTruck}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '18px' }}>
+          <div className="responsive-grid-2" style={{ marginBottom: '18px' }}>
             <div>
               <label style={{ display: 'block', fontWeight: '600', fontSize: '0.88rem', marginBottom: '6px', color: '#334155' }}>Truck Model / Description</label>
               <input
@@ -635,7 +635,7 @@ export default function EcoLogisticsPage({ setActiveTab }) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '18px', marginBottom: '18px' }}>
+          <div className="responsive-grid-3" style={{ marginBottom: '18px' }}>
             <div>
               <label style={{ display: 'block', fontWeight: '600', fontSize: '0.88rem', marginBottom: '6px', color: '#334155' }}>Payload Capacity (Tons)</label>
               <input
@@ -674,7 +674,7 @@ export default function EcoLogisticsPage({ setActiveTab }) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '18px', marginBottom: '22px' }}>
+          <div className="responsive-grid-3" style={{ marginBottom: '22px' }}>
             <div>
               <label style={{ display: 'block', fontWeight: '600', fontSize: '0.88rem', marginBottom: '6px', color: '#334155' }}>Available Pickup Date</label>
               <input

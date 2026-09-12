@@ -596,3 +596,213 @@ h1, h2, h3, h4, h5, h6 {
   .impact-table-value { text-align: left !important; margin-top: 5px; }
   .impact-table-value::before { content: 'Impact: '; color: #94A3B8; font-weight: 400; }
 }
+
+/* Glassmorphic Dropdown & UI Micro-Animations */
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.user-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: 285px;
+  background: #FFFFFF;
+  backdrop-filter: blur(16px);
+  border: 1px solid #CBD5E1;
+  border-radius: 14px;
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(0, 0, 0, 0.05);
+  padding: 10px;
+  z-index: 2500;
+  animation: dropdownFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dropdown-item-btn {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #1E293B;
+  font-size: 0.88rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dropdown-item-btn:hover {
+  background: #ECFDF5;
+  border-color: #A7F3D0;
+  color: #047857;
+  transform: translateX(3px);
+}
+
+.dropdown-item-btn.active {
+  background: #D1FAE5;
+  border-color: #6EE7B7;
+  color: #065F46;
+}
+
+/* ==========================================================================
+   RESPONSIVE DESIGN SYSTEM & MOBILE HAMBURGER NAVIGATION
+   ========================================================================== */
+
+/* Hamburger Button: hidden on desktop, visible on <= 840px screens */
+.mobile-hamburger-btn {
+  display: none;
+  background: #F8FAFC;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.mobile-hamburger-btn:hover {
+  background: #E2E8F0;
+}
+
+/* Mobile Nav Drawer Overlay */
+.mobile-nav-drawer {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #FFFFFF;
+  border-bottom: 1px solid #E2E8F0;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 2900;
+  animation: dropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.mobile-nav-drawer .nav-link {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 12px 16px;
+  font-size: 0.98rem;
+  border-radius: 8px;
+}
+
+/* Responsive Grid Helper Classes */
+.responsive-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.responsive-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.responsive-flex-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.responsive-tabs-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 4px;
+}
+.responsive-tabs-bar::-webkit-scrollbar {
+  height: 4px;
+}
+.responsive-tabs-bar::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
+/* Media Breakpoints */
+@media (max-width: 840px) {
+  .nav-links-desktop {
+    display: none !important;
+  }
+
+  .mobile-hamburger-btn {
+    display: flex !important;
+  }
+
+  .navbar {
+    padding: 10px 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .page-content {
+    padding: 18px 12px;
+  }
+
+  .hero-section {
+    padding: 28px 18px;
+    border-radius: 14px;
+    margin-bottom: 24px;
+  }
+
+  .hero-title {
+    font-size: clamp(1.8rem, 5vw, 2.5rem);
+  }
+
+  .hero-desc {
+    font-size: 0.98rem;
+    margin-bottom: 20px;
+  }
+
+  .cards-grid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+  }
+
+  .responsive-grid-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .responsive-grid-3 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .responsive-flex-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+}
+
+@media (max-width: 540px) {
+  .cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .user-dropdown-menu {
+    width: calc(100vw - 24px);
+    right: -12px;
+  }
+
+  .hero-section {
+    padding: 20px 14px;
+  }
+}
+
+

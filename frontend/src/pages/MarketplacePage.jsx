@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   MapPin, Package, ShieldCheck, Leaf, ArrowRight, Truck,
-  CheckCircle, RefreshCw, Check, X, Building2, Calendar, FileText, Info, Award, DollarSign, MessageSquare
+  CheckCircle, RefreshCw, Check, X, Building2, Calendar, FileText, Info, Award, DollarSign, MessageSquare, Sparkles, UserCheck
 } from 'lucide-react';
 import { calculateAvoidedCarbon } from '../utils/carbonEngine';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +28,8 @@ const MOCK_FALLBACK_LISTINGS = [
     distanceKm: 4.2,
     price: 15,
     isFree: false,
+    aiVerified: true,
+    verificationStatus: 'AI Verified',
     description: 'Once-used heavy duty 5-ply shipping boxes from electronics imports. Clean condition, zero oil or moisture damage.',
     image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=600&q=80'
   },
@@ -42,6 +44,8 @@ const MOCK_FALLBACK_LISTINGS = [
     distanceKm: 8.5,
     price: 250,
     isFree: false,
+    aiVerified: false,
+    verificationStatus: 'Seller Direct',
     description: 'Heat-treated ISPM 15 compliant Euro pallets. Suitable for high-density rack storage and international freight.',
     image: 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?auto=format&fit=crop&w=600&q=80'
   },
@@ -56,6 +60,8 @@ const MOCK_FALLBACK_LISTINGS = [
     distanceKm: 12.0,
     price: 0,
     isFree: true,
+    aiVerified: true,
+    verificationStatus: 'AI Verified',
     description: 'Clear pallet stretch wrap baled into 100kg bales. Free pickup offered for instant clearance.',
     image: 'https://images.unsplash.com/photo-1605600659908-0ef719419d41?auto=format&fit=crop&w=600&q=80'
   },
@@ -70,16 +76,24 @@ const MOCK_FALLBACK_LISTINGS = [
     distanceKm: 18.3,
     price: 450,
     isFree: false,
+    aiVerified: false,
+    verificationStatus: 'Seller Direct',
     description: 'Triple-rinsed food grade high-density polyethylene blue drums with tight head caps.',
     image: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=600&q=80'
   }
 ];
 
 function normalizeListing(listing) {
+  const isVerified = listing.aiVerified !== undefined && listing.aiVerified !== null
+    ? Boolean(listing.aiVerified)
+    : (listing.ai_verified !== undefined && listing.ai_verified !== null ? Boolean(listing.ai_verified) : false);
+
   return {
     ...listing,
-    createdBy: listing.createdBy || 'marketplace_supplier',
-    companyName: listing.companyName || 'Marketplace Supplier'
+    createdBy: listing.createdBy || listing.created_by || 'marketplace_supplier',
+    companyName: listing.companyName || listing.company_name || 'Marketplace Supplier',
+    aiVerified: isVerified,
+    verificationStatus: listing.verificationStatus || listing.verification_status || (isVerified ? 'AI Verified' : 'Seller Direct')
   };
 }
 
@@ -350,8 +364,8 @@ export default function MarketplacePage() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <MapPin size={16} color="#10B981" />
-            <span style={{ fontSize: '0.86rem', fontWeight: '700', color: '#0F172A' }}>
-              Distance Radius: <strong style={{ color: '#059669', fontSize: '0.95rem' }}>{maxRadius >= 100 ? '100+ km (All)' : `${maxRadius} km`}</strong>
+            <span style={{ fontSize: '0.86rem', fontWeight: '700', color: '#0F172A', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+              Distance Radius: <strong style={{ color: '#059669', fontSize: '0.92rem', minWidth: '112px', display: 'inline-block' }}>{maxRadius >= 100 ? '100+ km (All)' : `${maxRadius} km`}</strong>
             </span>
           </div>
 
@@ -491,12 +505,37 @@ export default function MarketplacePage() {
                 style={{ cursor: 'pointer' }}
               >
                 {/* Uploaded Product Photo */}
-                <div className="card-header-img">
+                <div className="card-header-img" style={{ position: 'relative' }}>
                   <img
                     src={item.image}
                     alt={item.title}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
+                  {/* Verification Status Badge Tag */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '10px',
+                    left: '10px',
+                    zIndex: 10,
+                    background: item.aiVerified === false || item.verificationStatus === 'Seller Direct' ? '#FEF3C7' : '#ECFDF5',
+                    color: item.aiVerified === false || item.verificationStatus === 'Seller Direct' ? '#92400E' : '#047857',
+                    border: item.aiVerified === false || item.verificationStatus === 'Seller Direct' ? '1px solid #FCD34D' : '1px solid #A7F3D0',
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    fontSize: '0.75rem',
+                    fontWeight: '800',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.18)'
+                  }}>
+                    {item.aiVerified === false || item.verificationStatus === 'Seller Direct' ? (
+                      <><UserCheck size={14} color="#D97706" /> Seller Direct</>
+                    ) : (
+                      <><Sparkles size={14} color="#059669" /> AI Verified</>
+                    )}
+                  </div>
+
                   <div className={`card-badge grade-badge-${(item.grade || 'A').toLowerCase()}`}>
                     Grade {item.grade || 'A'} • {item.grade === 'A' ? 'Direct Reuse' : 'Recycle Ready'}
                   </div>
@@ -524,6 +563,32 @@ export default function MarketplacePage() {
                         <Calendar size={12} /> {new Date(item.createdAt || Date.now()).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </span>
                     </div>
+                  </div>
+
+                  {/* Verification Method Status Badge */}
+                  <div style={{
+                    margin: '6px 0 10px',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.78rem',
+                    fontWeight: '800',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: item.aiVerified === false || item.verificationStatus === 'Seller Direct' ? '#FFFBEB' : '#F0FDF4',
+                    border: item.aiVerified === false || item.verificationStatus === 'Seller Direct' ? '1px solid #FDE68A' : '1px solid #BBF7D0',
+                    color: item.aiVerified === false || item.verificationStatus === 'Seller Direct' ? '#92400E' : '#047857'
+                  }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      {item.aiVerified === false || item.verificationStatus === 'Seller Direct' ? (
+                        <><UserCheck size={14} color="#D97706" /> Seller Direct Listing</>
+                      ) : (
+                        <><Sparkles size={14} color="#059669" /> AI Vision Verified</>
+                      )}
+                    </span>
+                    <span style={{ fontSize: '0.68rem', opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      {item.aiVerified === false || item.verificationStatus === 'Seller Direct' ? 'Seller Certified' : 'Verified AI'}
+                    </span>
                   </div>
 
                   <div style={{ fontSize: '0.88rem', color: '#475569', marginBottom: '12px' }}>
@@ -729,6 +794,43 @@ export default function MarketplacePage() {
                     <span style={{ color: '#64748B', display: 'block', fontSize: '0.7rem', fontWeight: '700' }}>Seller status</span>
                     <strong style={{ color: '#047857' }}>Verified</strong>
                   </div>
+                </div>
+
+                {/* AI Scanner Verification Status Box inside Modal */}
+                <div style={{
+                  background: selectedProduct.aiVerified === false || selectedProduct.verificationStatus === 'Seller Direct' ? '#FFFBEB' : '#F0FDF4',
+                  border: selectedProduct.aiVerified === false || selectedProduct.verificationStatus === 'Seller Direct' ? '1px solid #FDE68A' : '1px solid #BBF7D0',
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px'
+                }}>
+                  {selectedProduct.aiVerified === false || selectedProduct.verificationStatus === 'Seller Direct' ? (
+                    <>
+                      <UserCheck size={20} color="#D97706" style={{ flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontWeight: '800', color: '#92400E', fontSize: '0.86rem' }}>
+                          👤 Seller Direct Listing (Unverified by AI)
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: '#B45309' }}>
+                          This lot was listed directly by the seller without using the automated AI vision scanner to verify category and grade.
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={20} color="#059669" style={{ flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontWeight: '800', color: '#047857', fontSize: '0.86rem' }}>
+                          ✨ AI Vision Verified Category & Quality Grade
+                        </div>
+                        <div style={{ fontSize: '0.78rem', color: '#065F46' }}>
+                          Material specifications and quality grade were automatically analyzed and verified using AI visual recognition upon upload.
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 
