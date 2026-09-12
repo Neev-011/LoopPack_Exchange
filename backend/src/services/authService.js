@@ -8,10 +8,10 @@ const __dirname = path.dirname(__filename);
 const USERS_FILE = path.join(__dirname, '../../data/users.json');
 
 const INITIAL_USERS = [
-  { id: 'usr_apex', username: 'apex_logistics', companyName: 'Apex Packaging Solutions Ltd', email: 'contact@apexlogistics.com', password: 'password123', role: 'supplier', roleLabel: 'Packaging Generator / Supplier', industry: 'Logistics & Warehousing', securityQuestion: "What is your company's founding hub city?", securityAnswer: 'mumbai', createdAt: '2026-01-15T09:00:00.000Z' },
-  { id: 'usr_greenwave', username: 'greenwave_retail', companyName: 'GreenWave E-Commerce Hub', email: 'circularity@greenwaveretail.com', password: 'password123', role: 'buyer', roleLabel: 'Material Buyer & Recycler', industry: 'Retail & Consumer Packaging', securityQuestion: "What is your company's founding hub city?", securityAnswer: 'delhi', createdAt: '2026-02-10T11:30:00.000Z' },
+  { id: 'usr_apex', username: 'apex_logistics', companyName: 'Apex Packaging Solutions Ltd', email: 'contact@apexlogistics.com', password: 'password123', role: 'supplier', roleLabel: 'Packaging Supplier', industry: 'Logistics & Warehousing', securityQuestion: "What is your company's founding hub city?", securityAnswer: 'mumbai', createdAt: '2026-01-15T09:00:00.000Z' },
+  { id: 'usr_greenwave', username: 'greenwave_retail', companyName: 'GreenWave E-Commerce Hub', email: 'circularity@greenwaveretail.com', password: 'password123', role: 'buyer', roleLabel: 'Buyer / Recycler', industry: 'Retail & Consumer Packaging', securityQuestion: "What is your company's founding hub city?", securityAnswer: 'delhi', createdAt: '2026-02-10T11:30:00.000Z' },
   { id: 'usr_tatsav', username: 'tatsav_enterprise', companyName: 'LoopPack Industrial Ecosystems', email: 'tatsav@looppack.io', password: 'password123', role: 'enterprise', roleLabel: 'Enterprise Circularity Officer', industry: 'Closed-Loop Circular Supply Chain', securityQuestion: "What is your company's founding hub city?", securityAnswer: 'ahmedabad', createdAt: '2026-03-01T08:00:00.000Z' },
-  { id: 'usr_mahindra', username: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', email: 'dispatch@mahindrafreight.com', password: 'password123', role: 'logistics', roleLabel: 'Fleet / Backhaul Logistics Partner', industry: 'Freight & Fleet Logistics', securityQuestion: "What is your company's founding hub city?", securityAnswer: 'pune', createdAt: '2026-03-10T09:00:00.000Z' }
+  { id: 'usr_mahindra', username: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', email: 'dispatch@mahindrafreight.com', password: 'password123', role: 'logistics', roleLabel: 'Logistics Partner', industry: 'Freight & Fleet Logistics', securityQuestion: "What is your company's founding hub city?", securityAnswer: 'pune', createdAt: '2026-03-10T09:00:00.000Z' }
 ];
 
 function readLocalUsers() {
@@ -97,7 +97,9 @@ export async function registerUser({ username, companyName, email, password, rol
   const users = await readUsers();
   if (users.some(user => user.username.toLowerCase() === cleanUsername)) throw new Error(`Username "${cleanUsername}" is already registered. Please choose another username or sign in.`);
   if (users.some(user => user.email.toLowerCase() === cleanEmail)) throw new Error(`Corporate email "${cleanEmail}" is already linked to an account.`);
-  const roleLabels = { supplier: 'Packaging Generator / Supplier', buyer: 'Material Buyer & Recycler', enterprise: 'Enterprise Circularity Officer', logistics: 'Fleet / Backhaul Logistics Partner' };
+  const roleLabels = { supplier: 'Packaging Supplier', buyer: 'Buyer / Recycler', logistics: 'Logistics Partner' };
+  const allowedRoles = Object.keys(roleLabels);
+  if (!allowedRoles.includes(role)) throw new Error('Please choose a valid LoopPack usage role.');
   const user = { id: `usr_${Date.now()}`, username: cleanUsername, companyName: companyName.trim(), email: cleanEmail, password, role, roleLabel: roleLabels[role] || 'B2B Circular Packaging Partner', industry: industry.trim() || 'General Industrial', securityQuestion: securityQuestion.trim() || "What is your company's founding hub city?", securityAnswer: (securityAnswer || '').trim().toLowerCase(), createdAt: new Date().toISOString() };
   await saveUser(user);
   return sanitizeUser(user);
