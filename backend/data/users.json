@@ -130,5 +130,57 @@
     "securityQuestion": "What is your company's founding hub city?",
     "securityAnswer": "nn",
     "createdAt": "2026-09-12T20:07:04.455Z"
+  },
+  {
+    "id": "usr_1789248733694",
+    "username": "buy",
+    "companyName": "buy",
+    "email": "buy@gmail.com",
+    "password": "buy@1234",
+    "role": "supplier",
+    "roleLabel": "Buyer / Seller Organization",
+    "industry": "Logistics & Warehousing",
+    "securityQuestion": "What is your company's founding hub city?",
+    "securityAnswer": "morbi",
+    "createdAt": "2026-09-12T21:32:13.694Z"
+  },
+  {
+    "id": "usr_1789248762536",
+    "username": "sell",
+    "companyName": "sell",
+    "email": "sell@gmail.com",
+    "password": "sell@123",
+    "role": "supplier",
+    "roleLabel": "Buyer / Seller Organization",
+    "industry": "Logistics & Warehousing",
+    "securityQuestion": "What is your company's founding hub city?",
+    "securityAnswer": "morbi",
+    "createdAt": "2026-09-12T21:32:42.536Z"
+  },
+  {
+    "id": "usr_1789248802653",
+    "username": "logistic",
+    "companyName": "logistic",
+    "email": "logistic@gmail.com",
+    "password": "logistic@1",
+    "role": "supplier",
+    "roleLabel": "Buyer / Seller Organization",
+    "industry": "Logistics & Warehousing",
+    "securityQuestion": "What is your company's founding hub city?",
+    "securityAnswer": "morbi",
+    "createdAt": "2026-09-12T21:33:22.653Z"
+  },
+  {
+    "id": "usr_1789248860452",
+    "username": "logistic1",
+    "companyName": "logistic1",
+    "email": "logistic1@gmail.com",
+    "password": "logistic1@",
+    "role": "logistics",
+    "roleLabel": "Logistics Partner",
+    "industry": "Logistics & Warehousing",
+    "securityQuestion": "What is your company's founding hub city?",
+    "securityAnswer": "morbi",
+    "createdAt": "2026-09-12T21:34:20.452Z"
   }
 ]

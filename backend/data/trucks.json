@@ -1,0 +1,187 @@
+[
+  {
+    "id": "trk_1789271255695",
+    "truckName": "tata 5",
+    "vehicleReg": "GJ01JJ0101",
+    "capacityTons": 13.5,
+    "originCity": "Junagadh",
+    "destinationCity": "Ahmadabad",
+    "pickupAddress": {
+      "state": "Gujarat",
+      "city": "Junagadh",
+      "streetArea": "Mahape",
+      "landmark": ""
+    },
+    "deliveryAddress": {
+      "state": "Gujarat",
+      "city": "Ahmadabad",
+      "streetArea": "abc",
+      "landmark": ""
+    },
+    "availableDate": "2026-09-13",
+    "availableTime": "09:00",
+    "ratePerKm": 1,
+    "driverName": "Assigned Carrier Driver",
+    "driverPhone": "+91 98000 00000",
+    "status": "available",
+    "createdBy": "logistic1",
+    "companyName": "logistic1",
+    "companyEmail": "logistic1@gmail.com",
+    "lat": 23.18628674933605,
+    "lon": 72.62778768275801,
+    "originCoordinates": {
+      "lat": 19.115,
+      "lon": 73.015
+    },
+    "destinationCoordinates": {
+      "lat": 23.0330091,
+      "lon": 72.5608455
+    },
+    "routeCoordinatesAvailable": true,
+    "originLatitude": 19.115,
+    "originLongitude": 73.015,
+    "destinationLatitude": 23.0330091,
+    "destinationLongitude": 72.5608455,
+    "locationUpdatedAt": "2026-09-13T03:50:17.651Z",
+    "createdAt": "2026-09-13T03:47:35.695Z"
+  },
+  {
+    "id": "trk_1789269077294",
+    "truckName": "tata 4",
+    "vehicleReg": "GJ01JJ0101",
+    "capacityTons": 13.5,
+    "originCity": "Junagadh",
+    "destinationCity": "Gandhinagar",
+    "pickupAddress": {
+      "state": "Gujarat",
+      "city": "Junagadh",
+      "streetArea": "abc",
+      "landmark": ""
+    },
+    "deliveryAddress": {
+      "state": "Gujarat",
+      "city": "Gandhinagar",
+      "streetArea": "abc",
+      "landmark": ""
+    },
+    "availableDate": "2026-09-13",
+    "availableTime": "09:00",
+    "ratePerKm": 2,
+    "driverName": "Assigned Carrier Driver",
+    "driverPhone": "+91 98000 00000",
+    "status": "available",
+    "createdBy": "logistic1",
+    "companyName": "logistic1",
+    "companyEmail": "logistic1@gmail.com",
+    "lat": 23.18628674933605,
+    "lon": 72.62778768275801,
+    "originCoordinates": {
+      "lat": 21.5220416,
+      "lon": 70.4582458
+    },
+    "destinationCoordinates": {
+      "lat": 23.2232877,
+      "lon": 72.6492267
+    },
+    "routeCoordinatesAvailable": true,
+    "originLatitude": 21.5220416,
+    "originLongitude": 70.4582458,
+    "destinationLatitude": 23.2232877,
+    "destinationLongitude": 72.6492267,
+    "locationUpdatedAt": "2026-09-13T03:46:45.116Z",
+    "createdAt": "2026-09-13T03:11:17.294Z"
+  },
+  {
+    "id": "trk_1",
+    "truckName": "Tata 407 2.5T EV Container",
+    "vehicleReg": "MH-04-FK-8492",
+    "capacityTons": 2.5,
+    "originCity": "Mahape, Navi Mumbai",
+    "destinationCity": "Bhiwandi Gateway",
+    "pickupAddress": null,
+    "deliveryAddress": null,
+    "originCoordinates": {
+      "lat": 19.115,
+      "lon": 73.015
+    },
+    "destinationCoordinates": {
+      "lat": 19.2968,
+      "lon": 73.0631
+    },
+    "availableDate": "Available Today",
+    "availableTime": "09:00",
+    "ratePerKm": 28,
+    "driverName": "Ramesh Sharma",
+    "driverPhone": "+91 98201 48291",
+    "status": "available",
+    "createdBy": "mahindra_freight",
+    "companyName": "Mahindra Backhaul Fleet Carrier",
+    "companyEmail": "dispatch@mahindrafreight.com",
+    "lat": 19.115,
+    "lon": 73.015,
+    "locationUpdatedAt": null,
+    "createdAt": "2026-09-13T08:00:00.000Z"
+  },
+  {
+    "id": "trk_2",
+    "truckName": "Eicher Pro 6.0T High Deck CNG",
+    "vehicleReg": "MH-12-PQ-3104",
+    "capacityTons": 6,
+    "originCity": "Morbi, Gujarat",
+    "destinationCity": "Mumbai, Maharashtra",
+    "pickupAddress": null,
+    "deliveryAddress": null,
+    "originCoordinates": {
+      "lat": 22.8173,
+      "lon": 70.8377
+    },
+    "destinationCoordinates": {
+      "lat": 19.076,
+      "lon": 72.8777
+    },
+    "availableDate": "Available Today",
+    "availableTime": "09:00",
+    "ratePerKm": 42,
+    "driverName": "Suresh Kumar",
+    "driverPhone": "+91 97182 39102",
+    "status": "available",
+    "createdBy": "mahindra_freight",
+    "companyName": "Mahindra Backhaul Fleet Carrier",
+    "companyEmail": "dispatch@mahindrafreight.com",
+    "lat": 22.8173,
+    "lon": 70.8377,
+    "locationUpdatedAt": null,
+    "createdAt": "2026-09-13T08:00:00.000Z"
+  },
+  {
+    "id": "trk_3",
+    "truckName": "Ashok Leyland Boss 4.5T EV Container",
+    "vehicleReg": "MH-43-BB-9182",
+    "capacityTons": 4.5,
+    "originCity": "Thane West",
+    "destinationCity": "Taloja MIDC",
+    "pickupAddress": null,
+    "deliveryAddress": null,
+    "originCoordinates": {
+      "lat": 19.2183,
+      "lon": 72.9781
+    },
+    "destinationCoordinates": {
+      "lat": 19.0622,
+      "lon": 73.1114
+    },
+    "availableDate": "Available Today",
+    "availableTime": "09:00",
+    "ratePerKm": 36,
+    "driverName": "Vikram Singh",
+    "driverPhone": "+91 98334 19283",
+    "status": "available",
+    "createdBy": "mahindra_freight",
+    "companyName": "Mahindra Backhaul Fleet Carrier",
+    "companyEmail": "dispatch@mahindrafreight.com",
+    "lat": 19.2183,
+    "lon": 72.9781,
+    "locationUpdatedAt": null,
+    "createdAt": "2026-09-13T08:00:00.000Z"
+  }
+]

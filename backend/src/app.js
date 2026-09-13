@@ -43,6 +43,8 @@ import {
 import { getCompletedExchanges, recordCompletedExchange } from './services/exchangeService.js';
 import { solveOptimizedBackhaulRoute } from './services/vrpSolverService.js';
 import { rankLogisticsCandidates } from './services/logisticsCandidateMatchingService.js';
+import { readLocalTrucks, writeLocalTrucks, saveLocalTruck, updateLocalTruck, deleteLocalTruck } from './services/truckStorageService.js';
+import { resolveTruckCoordinates, isValidCoordinatePair as isValidTruckCoordinatePair } from './services/truckCoordinateService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -343,13 +345,19 @@ app.get('/api/v1/orders', async (req, res) => {
       ? req.query.role === 'buyer'
         ? await client`SELECT * FROM sales_orders WHERE buyer_username = ${username} ORDER BY created_at DESC`
         : req.query.role === 'logistics'
-          ? await client`SELECT * FROM sales_orders WHERE logistics_vehicle->>'createdBy' = ${username} ORDER BY created_at DESC`
+          ? await client`
+              SELECT * FROM sales_orders
+              WHERE LOWER(COALESCE(logistics_vehicle->>'createdBy', logistics_vehicle->>'created_by', logistics_vehicle->>'createdByUsername')) = LOWER(${username})
+              ORDER BY created_at DESC
+            `
           : await client`SELECT * FROM sales_orders WHERE seller_username = ${username} ORDER BY created_at DESC`
       : readLocalOrders()
         .filter(row => req.query.role === 'buyer'
           ? row.buyerUsername === username
           : req.query.role === 'logistics'
-            ? row.logisticsVehicle?.createdBy === username
+            ? [row.logisticsVehicle?.createdBy, row.logisticsVehicle?.created_by, row.logisticsVehicle?.createdByUsername]
+              .filter(Boolean)
+              .some(owner => String(owner).toLowerCase() === String(username).toLowerCase())
             : row.sellerUsername === username)
         .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       if (client && req.query.role === 'buyer') {
@@ -395,11 +403,43 @@ app.patch('/api/v1/orders/:id/logistics-status', async (req, res) => {
       return res.status(400).json({ error: 'Transport requests can only be accepted or rejected.' });
     }
     const client = getNeonClient();
-    if (!client) return res.status(503).json({ error: 'Database is unavailable.' });
+    if (!client) {
+      const orders = readLocalOrders();
+      const order = orders.find(item => item.id === req.params.id
+        && item.logisticsVehicle?.createdBy === username
+        && item.logisticsStatus === 'pending');
+      if (!order) return res.status(404).json({ error: 'Pending transport request not found for this logistics partner.' });
+
+      const currentVehicle = order.logisticsVehicle || {};
+      const history = Array.isArray(order.logisticsRequestHistory) ? order.logisticsRequestHistory : [];
+      const updatedHistory = [...history, {
+        vehicleId: currentVehicle.id,
+        vehicleName: currentVehicle.truckName,
+        provider: currentVehicle.companyName,
+        providerUsername: currentVehicle.createdBy,
+        status,
+        contactedAt: new Date().toISOString()
+      }];
+
+      if (status === 'accepted') {
+        order.logisticsStatus = 'confirmed';
+        order.status = 'logistics_confirmed';
+      } else {
+        const candidates = Array.isArray(order.logisticsCandidates) ? order.logisticsCandidates : [];
+        const contactedIds = new Set(updatedHistory.map(item => String(item.vehicleId)));
+        const nextVehicle = candidates.find(vehicle => !contactedIds.has(String(vehicle.id)));
+        order.logisticsStatus = nextVehicle ? 'pending' : 'no_logistics_available';
+        order.status = nextVehicle ? 'pending' : 'no_logistics_available';
+        if (nextVehicle) order.logisticsVehicle = nextVehicle;
+      }
+      order.logisticsRequestHistory = updatedHistory;
+      writeLocalOrders(orders);
+      return res.json({ status: 'success', data: normalizeOrder(order) });
+    }
     const orders = await client`
       SELECT * FROM sales_orders
       WHERE id = ${req.params.id}
-        AND logistics_vehicle->>'createdBy' = ${username}
+        AND LOWER(COALESCE(logistics_vehicle->>'createdBy', logistics_vehicle->>'created_by', logistics_vehicle->>'createdByUsername')) = LOWER(${username})
         AND logistics_status = 'pending'
       LIMIT 1
     `;
@@ -525,26 +565,13 @@ function normalizeOrder(row) {
   };
 }
 
-async function initDatabaseSchema() {
-  const client = getNeonClient();
-  if (client) {
-    try {
-      await client`ALTER TABLE listings ADD COLUMN IF NOT EXISTS ai_verified BOOLEAN DEFAULT false`;
-      await client`ALTER TABLE listings ADD COLUMN IF NOT EXISTS verification_status VARCHAR(50) DEFAULT 'Seller Direct'`;
-      console.log('[DB Schema] Verified ai_verified and verification_status columns in Neon PostgreSQL.');
-    } catch (err) {
-      console.warn('[DB Schema] Migration warning:', err.message);
-    }
-  }
-}
-initDatabaseSchema();
-
 async function getListings() {
   const client = getNeonClient();
   if (!client) return readDatabase();
 
-  const rows = await client`SELECT * FROM listings ORDER BY created_at DESC`;
-  return rows.map(row => {
+  try {
+    const rows = await client`SELECT * FROM listings ORDER BY created_at DESC`;
+    return rows.map(row => {
     const isVerified = row.ai_verified !== null && row.ai_verified !== undefined
       ? Boolean(row.ai_verified)
       : (row.aiVerified !== null && row.aiVerified !== undefined ? Boolean(row.aiVerified) : false);
@@ -568,10 +595,15 @@ async function getListings() {
       ownerRole: row.owner_role,
       createdByEmail: row.created_by_email || '',
       aiVerified: isVerified,
+      verificationMethod: row.verification_method || (isVerified ? 'ai' : 'manual'),
       verificationStatus: row.verification_status || (isVerified ? 'AI Verified' : 'Seller Direct'),
       createdAt: row.created_at
     };
-  });
+    });
+  } catch (err) {
+    console.warn('[Listings] Neon read failed; using local listing fallback:', err.message);
+    return readDatabase();
+  }
 }
 
 // Neon is the primary store when configured. JSON is only a local fallback.
@@ -582,12 +614,12 @@ async function saveDatabase(listings) {
       try {
         await client`
           INSERT INTO listings (
-            id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_by_email, ai_verified, verification_status, created_at
+            id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_by_email, ai_verified, verification_method, verification_status, created_at
           ) VALUES (
             ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade || 'A'},
             ${l.location || ''}, ${l.lat || 19.08}, ${l.lon || 72.88}, ${l.price || 0}, ${l.isFree || false}, ${l.description || ''},
             ${l.image || ''}, ${l.createdBy || 'anonymous'}, ${l.companyName || 'B2B Partner'}, ${l.ownerRole || 'Supplier'},
-            ${l.createdByEmail || ''}, ${Boolean(l.aiVerified)}, ${l.verificationStatus || (l.aiVerified ? 'AI Verified' : 'Seller Direct')}, ${l.createdAt || new Date().toISOString()}
+            ${l.createdByEmail || ''}, ${Boolean(l.aiVerified)}, ${l.verificationMethod || (l.aiVerified ? 'ai' : 'manual')}, ${l.verificationStatus || (l.aiVerified ? 'AI Verified' : 'Seller Direct')}, ${l.createdAt || new Date().toISOString()}
           )
           ON CONFLICT (id) DO UPDATE SET
             title = EXCLUDED.title, material_type = EXCLUDED.material_type, quantity = EXCLUDED.quantity,
@@ -717,7 +749,8 @@ app.get('/api/v1/listings', async (req, res) => {
   const listings = await getListings();
   const lat = parseFloat(req.query.lat) || 19.076;
   const lon = parseFloat(req.query.lon) || 72.877;
-  const radius = parseFloat(req.query.radiusKm) || 50;
+  const requestedRadius = String(req.query.radiusKm || '').trim().toLowerCase();
+  const radius = requestedRadius === 'all' ? Infinity : (parseFloat(requestedRadius) || 50);
   const owner = req.query.owner;
 
   let results = owner
@@ -745,7 +778,8 @@ app.post('/api/v1/listings', async (req, res) => {
     createdBy,
     companyName,
     ownerRole,
-    createdByEmail
+    createdByEmail,
+    verificationMethod
   } = req.body;
 
   if (!title || !materialType) {
@@ -774,6 +808,7 @@ app.post('/api/v1/listings', async (req, res) => {
 
   const listings = await getListings();
 
+  const aiVerified = verificationMethod === 'ai' && req.body.aiVerified === true;
   const newListing = {
     id: Date.now(),
     title,
@@ -792,8 +827,9 @@ app.post('/api/v1/listings', async (req, res) => {
     companyName,
     ownerRole: ownerRole || 'Buyer / Seller Organization',
     createdByEmail: createdByEmail || 'contact@looppack.io',
-    aiVerified: req.body.aiVerified !== undefined ? Boolean(req.body.aiVerified) : false,
-    verificationStatus: req.body.verificationStatus || (req.body.aiVerified ? 'AI Verified' : 'Seller Direct'),
+    aiVerified,
+    verificationMethod: aiVerified ? 'ai' : 'manual',
+    verificationStatus: aiVerified ? 'AI Verified' : 'Seller Direct',
     image: image || (materialType === 'pallet' 
       ? 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?auto=format&fit=crop&w=600&q=80'
       : materialType === 'hdpe'
@@ -1012,15 +1048,35 @@ app.get('/api/v1/trucks', async (req, res) => {
     }
   }
 
-  // Fallback preset trucks
-  res.json({
-    total: 3,
-    data: [
-      { id: 'trk_1', truckName: 'Tata 407 2.5T EV Container', vehicleReg: 'MH-04-FK-8492', capacityTons: 2.5, originCity: 'Mahape, Navi Mumbai', destinationCity: 'Bhiwandi Gateway', originCoordinates: { lat: 19.115, lon: 73.015 }, destinationCoordinates: { lat: 19.2968, lon: 73.0631 }, availableDate: 'Available Today', ratePerKm: 28, driverName: 'Ramesh Sharma', driverPhone: '+91 98201 48291', status: 'available', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() },
-      { id: 'trk_2', truckName: 'Eicher 11.10 6.0T High Deck CNG', vehicleReg: 'MH-12-PQ-3104', capacityTons: 6.0, originCity: 'Goregaon East', destinationCity: 'Kurla Yard', originCoordinates: { lat: 19.1663, lon: 72.8526 }, destinationCoordinates: { lat: 19.065, lon: 72.879 }, availableDate: 'Available Tomorrow', ratePerKm: 42, driverName: 'Suresh Kumar', driverPhone: '+91 97182 39102', status: 'available', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() },
-      { id: 'trk_3', truckName: 'Ashok Leyland Boss 4.5T EV Container', vehicleReg: 'MH-43-BB-9182', capacityTons: 4.5, originCity: 'Thane West', destinationCity: 'Taloja MIDC', originCoordinates: { lat: 19.2183, lon: 72.9781 }, destinationCoordinates: { lat: 19.0622, lon: 73.1114 }, availableDate: 'Available Today', ratePerKm: 36, driverName: 'Vikram Singh', driverPhone: '+91 98334 19283', status: 'in_transit', createdBy: 'mahindra_freight', companyName: 'Mahindra Backhaul Fleet Carrier', companyEmail: 'dispatch@mahindrafreight.com', createdAt: new Date().toISOString() }
-    ]
-  });
+  const localTrucks = readLocalTrucks();
+  let repaired = false;
+  const repairedTrucks = await Promise.all(localTrucks.map(async truck => {
+    if (isValidTruckCoordinatePair(truck.originCoordinates) && isValidTruckCoordinatePair(truck.destinationCoordinates)) return truck;
+    const coordinates = await resolveTruckCoordinates({
+      pickupAddress: truck.pickupAddress,
+      deliveryAddress: truck.deliveryAddress,
+      originCity: truck.originCity,
+      destinationCity: truck.destinationCity
+    });
+    if (!coordinates.origin && !coordinates.destination) return truck;
+    repaired = true;
+    return {
+      ...truck,
+      originCoordinates: coordinates.origin,
+      destinationCoordinates: coordinates.destination,
+      originLatitude: coordinates.origin?.lat ?? null,
+      originLongitude: coordinates.origin?.lon ?? null,
+      destinationLatitude: coordinates.destination?.lat ?? null,
+      destinationLongitude: coordinates.destination?.lon ?? null,
+      lat: coordinates.origin?.lat ?? truck.lat ?? null,
+      lon: coordinates.origin?.lon ?? truck.lon ?? null,
+      routeCoordinatesAvailable: Boolean(coordinates.origin && coordinates.destination)
+    };
+  }));
+  if (repaired) writeLocalTrucks(repairedTrucks);
+  const owner = req.query.owner;
+  const data = owner ? repairedTrucks.filter(truck => truck.createdBy === owner) : repairedTrucks;
+  res.json({ total: data.length, data });
 });
 
 app.post('/api/v1/trucks', async (req, res) => {
@@ -1067,12 +1123,17 @@ app.post('/api/v1/trucks', async (req, res) => {
   const cleanRate = Math.max(0, Number(ratePerKm) || 0);
   const originText = addressToLocationText(pickupAddress, originCity);
   const destinationText = addressToLocationText(deliveryAddress, destinationCity);
-  const resolvedOrigin = isValidCoordinatePair(originCoordinates)
-    ? { lat: Number(originCoordinates.lat), lon: Number(originCoordinates.lon) }
-    : await geocodeLocation(originText, { allowSyntheticFallback: false });
-  const resolvedDestination = isValidCoordinatePair(destinationCoordinates)
-    ? { lat: Number(destinationCoordinates.lat), lon: Number(destinationCoordinates.lon) }
-    : await geocodeLocation(destinationText, { allowSyntheticFallback: false });
+  const resolvedCoordinates = await resolveTruckCoordinates({
+    pickupAddress,
+    deliveryAddress,
+    originCity,
+    destinationCity
+  });
+  const resolvedOrigin = resolvedCoordinates.origin;
+  const resolvedDestination = resolvedCoordinates.destination;
+  if (!resolvedOrigin || !resolvedDestination) {
+    return res.status(400).json({ error: 'Pickup and delivery addresses must resolve to real coordinates before listing this vehicle.' });
+  }
 
   const newTruck = {
     id: `trk_${Date.now()}`,
@@ -1092,8 +1153,8 @@ app.post('/api/v1/trucks', async (req, res) => {
     createdBy,
     companyName,
     companyEmail: companyEmail || 'dispatch@logistics.com',
-    lat: resolvedOrigin?.lat ?? (isValidCoordinatePair({ lat, lon }) ? Number(lat) : null),
-    lon: resolvedOrigin?.lon ?? (isValidCoordinatePair({ lat, lon }) ? Number(lon) : null),
+    lat: resolvedOrigin.lat,
+    lon: resolvedOrigin.lon,
     originCoordinates: resolvedOrigin,
     destinationCoordinates: resolvedDestination,
     routeCoordinatesAvailable: Boolean(resolvedOrigin && resolvedDestination),
@@ -1123,6 +1184,8 @@ app.post('/api/v1/trucks', async (req, res) => {
     }
   }
 
+  saveLocalTruck(newTruck);
+
   console.log(`[API] New Truck Listed by @${newTruck.createdBy} (${newTruck.companyName}): Reg ${newTruck.vehicleReg} - ${newTruck.truckName}`);
 
   res.status(201).json({
@@ -1139,7 +1202,11 @@ app.patch('/api/v1/trucks/:id/location', async (req, res) => {
     return res.status(400).json({ error: 'Valid latitude and longitude are required.' });
   }
   const client = getNeonClient();
-  if (!client) return res.status(503).json({ error: 'Database is unavailable. Location was not updated.' });
+  if (!client) {
+    const updatedTruck = updateLocalTruck(req.params.id, truck => ({ ...truck, lat, lon, locationUpdatedAt: new Date().toISOString() }));
+    if (!updatedTruck) return res.status(404).json({ error: 'Truck listing not found.' });
+    return res.json({ status: 'success', data: { id: updatedTruck.id, lat, lon, locationUpdatedAt: updatedTruck.locationUpdatedAt } });
+  }
   try {
     const updatedAt = new Date().toISOString();
     const rows = await client`
@@ -1168,6 +1235,8 @@ app.delete('/api/v1/trucks/:id', async (req, res) => {
       return res.status(500).json({ error: err.message });
     }
   }
+  const deleted = deleteLocalTruck(req.params.id);
+  if (!deleted) return res.status(404).json({ error: 'Truck listing not found.' });
   res.json({ status: 'success', message: 'Truck listing deleted.' });
 });
 
@@ -1180,7 +1249,11 @@ app.patch('/api/v1/trucks/:id/status', async (req, res) => {
     return res.status(400).json({ error: 'Invalid ride status.' });
   }
   const client = getNeonClient();
-  if (!client) return res.status(503).json({ error: 'Database is unavailable.' });
+  if (!client) {
+    const updatedTruck = updateLocalTruck(req.params.id, truck => truck.createdBy === username ? { ...truck, status } : truck);
+    if (!updatedTruck || updatedTruck.createdBy !== username) return res.status(404).json({ error: 'Ride not found or not owned by this logistics account.' });
+    return res.json({ status: 'success', data: { id: updatedTruck.id, status: updatedTruck.status } });
+  }
   const rows = await client`
     UPDATE trucks SET status = ${status}
     WHERE id = ${req.params.id} AND created_by = ${username}

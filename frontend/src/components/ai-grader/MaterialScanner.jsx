@@ -212,7 +212,12 @@ export default function MaterialScanner({ onScanned }) {
         if (requestId !== scanRequest.current) return;
         setScanProgress(100);
         setIsScanning(false);
-        const fullResult = { ...detected, image: uploadedImage };
+        const fullResult = {
+          ...detected,
+          image: uploadedImage,
+          verificationMethod: 'ai',
+          aiVerified: detected.isPackaging === true
+        };
         setAiResult(fullResult);
         setManualMaterialType(null);
         setResult(fullResult);
@@ -225,7 +230,9 @@ export default function MaterialScanner({ onScanned }) {
           ...MATERIAL_PRESETS_DATA.rejected,
           confidence: 'AI unavailable',
           suggestedGradeReason: error.message,
-          image: uploadedImage
+          image: uploadedImage,
+          verificationMethod: 'ai',
+          aiVerified: false
         });
       });
   };
@@ -234,11 +241,11 @@ export default function MaterialScanner({ onScanned }) {
     if (manualMaterialType === matType) {
       setManualMaterialType(null);
       setResult(aiResult || { ...MATERIAL_PRESETS_DATA.rejected, image: uploadedImage });
-      if (onScanned) onScanned(aiResult || { ...MATERIAL_PRESETS_DATA.rejected, image: uploadedImage });
+      if (onScanned) onScanned(aiResult || { ...MATERIAL_PRESETS_DATA.rejected, image: uploadedImage, verificationMethod: 'ai', aiVerified: false });
       return;
     }
     const updated = MATERIAL_PRESETS_DATA[matType] || MATERIAL_PRESETS_DATA.cardboard;
-    const fullResult = { ...updated, image: uploadedImage };
+    const fullResult = { ...updated, image: uploadedImage, verificationMethod: 'manual', aiVerified: false };
     setManualMaterialType(matType);
     setResult(fullResult);
     if (onScanned) onScanned(fullResult);
@@ -673,7 +680,7 @@ export default function MaterialScanner({ onScanned }) {
                           type="button"
                           onClick={() => {
                             setManualMaterialType(null);
-                            const restored = aiResult || { ...MATERIAL_PRESETS_DATA.rejected, image: uploadedImage };
+                            const restored = aiResult || { ...MATERIAL_PRESETS_DATA.rejected, image: uploadedImage, verificationMethod: 'ai', aiVerified: false };
                             setResult(restored);
                             if (onScanned) onScanned(restored);
                           }}

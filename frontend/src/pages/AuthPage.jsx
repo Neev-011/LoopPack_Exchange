@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   Building2, ShieldCheck, Lock, Mail, User, ArrowRight, 
   CheckCircle2, AlertCircle, RefreshCw, KeyRound, HelpCircle, 
-  Sparkles, Briefcase, ChevronRight, UserCheck
+  Briefcase, UserCheck
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Logo from '../components/common/Logo';
@@ -17,8 +17,6 @@ export default function AuthPage({ setActiveTab }) {
     checkUsername, 
     resetPassword, 
     recoverUsername, 
-    switchAccount, 
-    demoUsers,
     logout
   } = useAuth();
 
@@ -839,66 +837,6 @@ export default function AuthPage({ setActiveTab }) {
         )}
       </div>
 
-      {/* ---------------- 1-CLICK DEMO B2B ACCOUNTS ---------------- */}
-      <div style={{
-        background: '#F8FAFC',
-        borderRadius: '16px',
-        padding: '24px 30px',
-        border: '1px solid #E2E8F0'
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#0F172A', fontWeight: '700', fontSize: '0.95rem' }}>
-          <Sparkles size={18} color="#059669" />
-          <span>⚡ Instant B2B Demo Accounts (1-Click Switcher)</span>
-        </div>
-        <p style={{ fontSize: '0.85rem', color: '#64748B', marginTop: '4px', marginBottom: '16px' }}>
-          Click any pre-configured enterprise below to immediately experience multi-user data isolation, listings management, and personalized ESG certificates:
-        </p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
-          {demoUsers.map((user) => {
-            const isActive = currentUser?.username === user.username;
-            return (
-              <div
-                key={user.id}
-                onClick={() => {
-                  switchAccount(user);
-                  setSuccessMsg(`Switched to active enterprise: ${user.companyName}`);
-                  setTimeout(() => setActiveTab(user.role === 'logistics' ? 'logistics' : 'marketplace'), 600);
-                }}
-                style={{
-                  background: isActive ? '#ECFDF5' : '#FFFFFF',
-                  border: isActive ? '2px solid #10B981' : '1px solid #CBD5E1',
-                  borderRadius: '12px',
-                  padding: '16px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease',
-                  boxShadow: isActive ? '0 4px 14px rgba(16, 185, 129, 0.15)' : 'none'
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontWeight: '800', fontSize: '0.95rem', color: '#0F172A' }}>{user.companyName}</div>
-                    <div style={{ fontSize: '0.8rem', color: '#059669', fontWeight: '600' }}>@{user.username}</div>
-                  </div>
-                  {isActive ? (
-                    <span style={{ background: '#10B981', color: 'white', fontSize: '0.72rem', fontWeight: '700', padding: '2px 8px', borderRadius: '12px' }}>
-                      ACTIVE
-                    </span>
-                  ) : (
-                    <ChevronRight size={18} color="#94A3B8" />
-                  )}
-                </div>
-                <div style={{ fontSize: '0.78rem', color: '#64748B', marginTop: '8px' }}>
-                  <strong>Role:</strong> {user.roleLabel}
-                </div>
-                <div style={{ fontSize: '0.75rem', color: '#94A3B8', marginTop: '2px' }}>
-                  Industry: {user.industry}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }

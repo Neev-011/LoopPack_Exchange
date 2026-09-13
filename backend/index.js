@@ -13,12 +13,13 @@ const { isNeonConnected, initNeonTables } = await import('./src/config/neonDb.js
 
 const PORT = process.env.PORT || 5001;
 
+if (isNeonConnected) {
+  await initNeonTables();
+}
+
 app.listen(PORT, async () => {
   console.log(`[LoopPack Exchange API] Server running on http://localhost:${PORT}`);
   console.log(`[Env Config] GEMINI_API_KEY loaded: ${process.env.GEMINI_API_KEY ? 'YES (configured)' : 'NO (missing)'}`);
   console.log(`[Database] Neon PostgreSQL Serverless: ${isNeonConnected ? 'CONNECTED' : 'LOCAL JSON DB (DATABASE_URL ready)'}`);
 
-  if (isNeonConnected) {
-    await initNeonTables();
-  }
 });
