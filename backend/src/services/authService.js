@@ -70,12 +70,6 @@ async function readUsers() {
 }
 
 async function saveUser(user) {
-  // Always save to local JSON file first so users are guaranteed persisted
-  const users = readLocalUsers();
-  const index = users.findIndex(item => item.id === user.id);
-  if (index === -1) users.push(user); else users[index] = user;
-  saveLocalUsers(users);
-
   const client = getNeonClient();
   if (client) {
     try {
@@ -86,10 +80,16 @@ async function saveUser(user) {
           role=EXCLUDED.role, role_label=EXCLUDED.role_label, industry=EXCLUDED.industry,
           security_question=EXCLUDED.security_question, security_answer=EXCLUDED.security_answer
       `;
+      return;
     } catch (err) {
-      console.warn('[Neon DB User Save Error]:', err.message);
+      console.warn('[Neon DB User Save Error, using local fallback]:', err.message);
     }
   }
+
+  const users = readLocalUsers();
+  const index = users.findIndex(item => item.id === user.id);
+  if (index === -1) users.push(user); else users[index] = user;
+  saveLocalUsers(users);
 }
 
 export async function getAllDemoUsers() {

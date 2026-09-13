@@ -1,5 +1,51 @@
 [
   {
+    "id": "trk_1789273361445",
+    "truckName": "Tata Eicher",
+    "vehicleReg": "GJ01JJ0101",
+    "capacityTons": 10,
+    "originCity": "Junagadh",
+    "destinationCity": "Gandhinagar",
+    "pickupAddress": {
+      "state": "Gujarat",
+      "city": "Junagadh",
+      "streetArea": "abc",
+      "landmark": ""
+    },
+    "deliveryAddress": {
+      "state": "Gujarat",
+      "city": "Gandhinagar",
+      "streetArea": "abc",
+      "landmark": ""
+    },
+    "availableDate": "2026-09-13",
+    "availableTime": "09:00",
+    "ratePerKm": 10,
+    "driverName": "Assigned Carrier Driver",
+    "driverPhone": "+91 98000 00000",
+    "status": "available",
+    "createdBy": "neev2",
+    "companyName": "neev2",
+    "companyEmail": "neev2@gmail.com",
+    "lat": 21.5220416,
+    "lon": 70.4582458,
+    "originCoordinates": {
+      "lat": 21.5220416,
+      "lon": 70.4582458
+    },
+    "destinationCoordinates": {
+      "lat": 23.2232877,
+      "lon": 72.6492267
+    },
+    "routeCoordinatesAvailable": true,
+    "originLatitude": 21.5220416,
+    "originLongitude": 70.4582458,
+    "destinationLatitude": 23.2232877,
+    "destinationLongitude": 72.6492267,
+    "locationUpdatedAt": "2026-09-13T04:22:41.445Z",
+    "createdAt": "2026-09-13T04:22:41.445Z"
+  },
+  {
     "id": "trk_1789271255695",
     "truckName": "tata 5",
     "vehicleReg": "GJ01JJ0101",
