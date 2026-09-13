@@ -29,6 +29,7 @@ function timeToMinutes(value) {
 
 function compatibleTime(requestedTime, availableTime) {
   if (!requestedTime || !availableTime) return true;
+  if (availableTime === '00:00') return true;
   const requested = timeToMinutes(requestedTime);
   const available = timeToMinutes(availableTime);
   return requested !== null && available !== null && Math.abs(requested - available) <= 120;

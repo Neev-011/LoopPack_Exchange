@@ -16,6 +16,13 @@ const API_BASE_URL = 'http://localhost:5001/api/v1';
 const HIDDEN_SELLER_EMAILS = new Set(['jeel@gmail.com', 'n@gmail.com']);
 const HIDDEN_SELLER_USERNAMES = new Set(['jeel']);
 
+function getTodayDate() {
+  const today = new Date();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${today.getFullYear()}-${month}-${day}`;
+}
+
 const LOGISTICS_HUB_COORDINATES = [
   { match: 'mahape', lat: 19.115, lon: 73.015 },
   { match: 'navi mumbai', lat: 19.033, lon: 73.03 },
@@ -121,7 +128,7 @@ export default function MarketplacePage() {
       destination: '',
       deliveryAddress: { state: '', city: '', streetArea: '', landmark: '' },
       paymentMethod: 'Cash on delivery'
-      ,pickupDate: new Date().toISOString().slice(0, 10)
+      ,pickupDate: getTodayDate()
       ,pickupTime: '09:00'
     });
     setBuyerCoordinates(null);
@@ -178,7 +185,8 @@ export default function MarketplacePage() {
     try {
       const lat = location?.lat ?? 19.076;
       const lon = location?.lon ?? 72.877;
-      const res = await fetch(`${API_BASE_URL}/listings?radiusKm=${radius}&lat=${lat}&lon=${lon}`);
+      const radiusQuery = Number(radius) >= 100 ? 'all' : String(radius);
+      const res = await fetch(`${API_BASE_URL}/listings?radiusKm=${radiusQuery}&lat=${lat}&lon=${lon}`);
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.data)) {
@@ -344,11 +352,7 @@ export default function MarketplacePage() {
         body: JSON.stringify({
           vehicles: logisticsVehicles.map(vehicle => ({
             ...vehicle,
-            origin: vehicle.originCoordinates || (
-              Number.isFinite(Number(vehicle.lat)) && Number.isFinite(Number(vehicle.lon))
-                ? { lat: Number(vehicle.lat), lon: Number(vehicle.lon) }
-                : null
-            ),
+            origin: vehicle.originCoordinates || null,
             destination: vehicle.destinationCoordinates
           })),
           shipment: {
@@ -367,7 +371,11 @@ export default function MarketplacePage() {
       });
       if (!response.ok) throw new Error(`Matching request failed with status ${response.status}.`);
       const result = await response.json();
-      const candidates = Array.isArray(result.data) ? result.data : [];
+      const candidates = Array.isArray(result.data)
+        ? result.data
+          .map(candidate => candidate?.vehicle ? { ...candidate.vehicle, ...candidate } : candidate)
+          .filter(candidate => candidate?.id && candidate?.truckName)
+        : [];
       setMatchedLogisticsVehicles(candidates);
       setTransportSearchState(candidates.length ? 'success' : 'no-match');
     } catch (error) {
@@ -1007,6 +1015,14 @@ export default function MarketplacePage() {
                         <div style={{ fontSize: '0.78rem', marginTop: '4px' }}>
                           {candidate.originCity} → {candidate.destinationCity}
                         </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '4px 12px', fontSize: '0.75rem', color: '#475569', marginTop: '8px' }}>
+                          <span><strong>Registration:</strong> {candidate.vehicleReg || 'Not provided'}</span>
+                          <span><strong>Capacity:</strong> {candidate.capacityTons ?? 'Not provided'} tons</span>
+                          <span><strong>Driver:</strong> {candidate.driverName || 'Assigned carrier driver'}</span>
+                          <span><strong>Contact:</strong> {candidate.driverPhone || candidate.companyEmail || 'Not provided'}</span>
+                          <span><strong>Availability:</strong> {formatVehicleAvailability(candidate.availableDate, candidate.availableTime)}</span>
+                          <span><strong>Rate:</strong> {candidate.ratePerKm != null ? `₹${Number(candidate.ratePerKm).toLocaleString('en-IN')} / km` : 'On request'}</span>
+                        </div>
                         {candidate.matchMode === 'ON_ROUTE_MATCH' && (
                           <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: '5px' }}>
                             Base route: {candidate.baseDistanceKm} km · With shipment: {candidate.combinedDistanceKm} km · Detour: {candidate.detourKm} km ({candidate.detourPercent}%)
@@ -1055,6 +1071,12 @@ export default function MarketplacePage() {
                   onUseCurrentLocation={useBuyerLocation}
                   onSetLocation={() => setBuyerLocationSet(true)}
                   onLocationChange={() => setBuyerLocationSet(false)}
+                  geocodeLocation={`${orderDetails.deliveryAddress.city}, ${orderDetails.deliveryAddress.state}`}
+                  onAddressChange={deliveryAddress => setOrderDetails(current => ({
+                    ...current,
+                    deliveryAddress: { ...current.deliveryAddress, state: deliveryAddress.state, city: deliveryAddress.city },
+                    destination: formatAddress({ ...current.deliveryAddress, ...deliveryAddress })
+                  }))}
                 />
                 <label style={{ display: 'block', color: '#334155', fontSize: 13 }}>
                   Payment method

@@ -86,10 +86,16 @@ export async function initNeonTables() {
         company_name VARCHAR(255),
         owner_role VARCHAR(100),
         created_by_email VARCHAR(255),
+        ai_verified BOOLEAN DEFAULT FALSE,
+        verification_method VARCHAR(20) DEFAULT 'manual',
+        verification_status VARCHAR(50) DEFAULT 'Seller Direct',
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       )
     `;
     await client`ALTER TABLE listings ADD COLUMN IF NOT EXISTS created_by_email VARCHAR(255)`;
+    await client`ALTER TABLE listings ADD COLUMN IF NOT EXISTS ai_verified BOOLEAN DEFAULT FALSE`;
+    await client`ALTER TABLE listings ADD COLUMN IF NOT EXISTS verification_method VARCHAR(20) DEFAULT 'manual'`;
+    await client`ALTER TABLE listings ADD COLUMN IF NOT EXISTS verification_status VARCHAR(50) DEFAULT 'Seller Direct'`;
 
     // 2. Inquiries Table
     await client`

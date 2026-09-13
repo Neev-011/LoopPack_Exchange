@@ -43,6 +43,10 @@ async function main() {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     )
   `;
+  await sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS created_by_email VARCHAR(255)`;
+  await sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS ai_verified BOOLEAN DEFAULT FALSE`;
+  await sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS verification_method VARCHAR(20) DEFAULT 'manual'`;
+  await sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS verification_status VARCHAR(50) DEFAULT 'Seller Direct'`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS inquiries (
@@ -219,17 +223,58 @@ async function main() {
       const listingsData = JSON.parse(fs.readFileSync(dbFile, 'utf8') || '[]');
       for (const l of listingsData) {
         await sql`
-          INSERT INTO listings (id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_at)
+          INSERT INTO listings (id, title, material_type, quantity, unit, grade, location, lat, lon, price, is_free, description, image, created_by, company_name, owner_role, created_by_email, ai_verified, verification_method, verification_status, created_at)
           VALUES (
             ${String(l.id)}, ${l.title}, ${l.materialType}, ${l.quantity}, ${l.unit}, ${l.grade},
             ${l.location}, ${l.lat}, ${l.lon}, ${l.price}, ${l.isFree}, ${l.description},
-            ${l.image}, ${l.createdBy}, ${l.companyName}, ${l.ownerRole || 'Supplier'}, ${l.createdAt || new Date().toISOString()}
+            ${l.image}, ${l.createdBy}, ${l.companyName}, ${l.ownerRole || 'Supplier'}, ${l.createdByEmail || ''}, ${l.aiVerified === true}, ${l.verificationMethod || (l.aiVerified ? 'ai' : 'manual')}, ${l.aiVerified ? 'AI Verified' : 'Seller Direct'}, ${l.createdAt || new Date().toISOString()}
           )
           ON CONFLICT (id) DO NOTHING
         `;
       }
       console.log(`✅ Migrated ${listingsData.length} material listings into Neon Postgres!`);
     }
+  }
+
+  const trucksFile = path.join(__dirname, '../../data/trucks.json');
+  if (fs.existsSync(trucksFile)) {
+    const trucksData = JSON.parse(fs.readFileSync(trucksFile, 'utf8') || '[]');
+    for (const truck of trucksData) {
+      await sql`
+        INSERT INTO trucks (
+          id, truck_name, vehicle_reg, capacity_tons, origin_city, destination_city,
+          pickup_address, delivery_address, available_date, available_time, rate_per_km,
+          driver_name, driver_phone, status, created_by, company_name, company_email,
+          lat, lon, origin_latitude, origin_longitude, destination_latitude,
+          destination_longitude, location_updated_at, created_at
+        ) VALUES (
+          ${truck.id}, ${truck.truckName}, ${truck.vehicleReg}, ${truck.capacityTons},
+          ${truck.originCity}, ${truck.destinationCity},
+          ${truck.pickupAddress ? JSON.stringify(truck.pickupAddress) : null},
+          ${truck.deliveryAddress ? JSON.stringify(truck.deliveryAddress) : null},
+          ${truck.availableDate}, ${truck.availableTime}, ${truck.ratePerKm},
+          ${truck.driverName}, ${truck.driverPhone}, ${truck.status}, ${truck.createdBy},
+          ${truck.companyName}, ${truck.companyEmail}, ${truck.lat}, ${truck.lon},
+          ${truck.originCoordinates?.lat ?? null}, ${truck.originCoordinates?.lon ?? null},
+          ${truck.destinationCoordinates?.lat ?? null}, ${truck.destinationCoordinates?.lon ?? null},
+          ${truck.locationUpdatedAt || null}, ${truck.createdAt || new Date().toISOString()}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          truck_name = EXCLUDED.truck_name, vehicle_reg = EXCLUDED.vehicle_reg,
+          capacity_tons = EXCLUDED.capacity_tons, origin_city = EXCLUDED.origin_city,
+          destination_city = EXCLUDED.destination_city, pickup_address = EXCLUDED.pickup_address,
+          delivery_address = EXCLUDED.delivery_address, available_date = EXCLUDED.available_date,
+          available_time = EXCLUDED.available_time, rate_per_km = EXCLUDED.rate_per_km,
+          driver_name = EXCLUDED.driver_name, driver_phone = EXCLUDED.driver_phone,
+          status = EXCLUDED.status, company_name = EXCLUDED.company_name,
+          company_email = EXCLUDED.company_email, lat = EXCLUDED.lat, lon = EXCLUDED.lon,
+          origin_latitude = EXCLUDED.origin_latitude, origin_longitude = EXCLUDED.origin_longitude,
+          destination_latitude = EXCLUDED.destination_latitude,
+          destination_longitude = EXCLUDED.destination_longitude,
+          location_updated_at = EXCLUDED.location_updated_at
+      `;
+    }
+    console.log(`Migrated ${trucksData.length} trucks into Neon Postgres.`);
   }
 
   const inquiriesFile = path.join(__dirname, '../../data/inquiries.json');

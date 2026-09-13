@@ -65,3 +65,16 @@ test('does not require OSRM for a valid direct route', async () => {
   });
   assert.equal(result[0].matchMode, 'DIRECT_MATCH');
 });
+
+test('allows all-day midnight availability and prefers the cheaper direct vehicle', async () => {
+  const result = await rankLogisticsCandidates({
+    shipment,
+    routeFetcher,
+    vehicles: [
+      { ...baseVehicle, id: 'expensive', originCity: 'Morbi', destinationCity: 'Mumbai', ratePerKm: 20, availableTime: '09:00' },
+      { ...baseVehicle, id: 'cheap', originCity: 'Morbi', destinationCity: 'Mumbai', ratePerKm: 5, availableTime: '00:00' }
+    ]
+  });
+  assert.deepEqual(result.map(candidate => candidate.id), ['cheap', 'expensive']);
+  assert.equal(result[0].estimatedCost, 416.88);
+});

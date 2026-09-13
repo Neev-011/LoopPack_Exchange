@@ -93,6 +93,7 @@ export default function EcoLogisticsPage({ setActiveTab }) {
   const [activeTruckId, setActiveTruckId] = useState(null);
   const [originCoordinates, setOriginCoordinates] = useState(null);
   const [originLocationSet, setOriginLocationSet] = useState(false);
+  const [destinationCoordinates, setDestinationCoordinates] = useState(null);
 
   // Page & Solver State
   const [listedTrucks, setListedTrucks] = useState([]);
@@ -240,7 +241,8 @@ export default function EcoLogisticsPage({ setActiveTab }) {
       companyName: currentUser.companyName,
       companyEmail: currentUser.email,
       lat: Number(originCoordinates.lat),
-  lon: Number(originCoordinates.lon),
+        lon: Number(originCoordinates.lon),
+        destinationCoordinates,
   role: currentUser.role
     };
 
@@ -311,9 +313,7 @@ export default function EcoLogisticsPage({ setActiveTab }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not update transport request.');
-      setTransportRequests(current => current.map(request => request.id === orderId
-        ? { ...request, logisticsStatus: data.data.logistics_status, status: data.data.status }
-        : request));
+      await fetchTransportRequests();
     } catch (err) {
       setErrorMsg(err.message);
     }
@@ -523,12 +523,33 @@ export default function EcoLogisticsPage({ setActiveTab }) {
                   }}
                   onSetLocation={() => setOriginLocationSet(true)}
                   onLocationChange={() => setOriginLocationSet(false)}
+                  geocodeLocation={`${pickupAddress.city}, ${pickupAddress.state}`}
+                  onAddressChange={address => {
+                    setPickupAddress(current => ({ ...current, state: address.state, city: address.city }));
+                    setOriginLocationSet(false);
+                  }}
                 />
               </div>
             </div>
             <div style={{ border: '1px solid #E2E8F0', borderRadius: '10px', padding: '14px' }}>
               <h4 style={{ margin: '0 0 12px', color: '#0F172A' }}>Delivery Address</h4>
               <AddressForm value={deliveryAddress} onChange={setDeliveryAddress} idPrefix="delivery-address" required />
+              <div style={{ marginTop: '14px' }}>
+                <LocationPicker
+                  location={`${deliveryAddress.streetArea}, ${deliveryAddress.city}, ${deliveryAddress.state}`}
+                  setLocation={value => setDeliveryAddress(current => ({ ...current, streetArea: value }))}
+                  coordinates={destinationCoordinates}
+                  setCoordinates={setDestinationCoordinates}
+                  status={locationStatus}
+                  onSetLocation={() => {}}
+                  onLocationChange={() => {}}
+                  geocodeLocation={`${deliveryAddress.city}, ${deliveryAddress.state}`}
+                  onAddressChange={address => setDeliveryAddress(address)}
+                  locationLabel="Exact delivery / destination location"
+                  confirmLabel="Confirm drop location"
+                  confirmedLabel="Drop location confirmed"
+                />
+              </div>
             </div>
           </div>
 

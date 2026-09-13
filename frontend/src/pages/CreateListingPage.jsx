@@ -30,6 +30,7 @@ export default function CreateListingPage({ setActiveTab }) {
   const [pickupLocationSet, setPickupLocationSet] = useState(false);
   const [locationStatus, setLocationStatus] = useState('loading');
   const [aiVerified, setAiVerified] = useState(false);
+  const [verificationMethod, setVerificationMethod] = useState('manual');
 
   const formatPickupAddress = address => (
     [address.streetArea, address.landmark, address.city, address.state].filter(Boolean).join(', ')
@@ -87,11 +88,14 @@ export default function CreateListingPage({ setActiveTab }) {
     if (!res || res.isPackaging === false) {
       if (res && res.image) setScannedImage(res.image);
       setAiVerified(false);
+      setVerificationMethod(res?.verificationMethod || 'ai');
       setErrorMsg('Uploaded photo was not verified as packaging by AI Vision. Flagged as Seller Direct Post.');
       return;
     }
     setErrorMsg(null);
-    setAiVerified(true);
+    const isGenuineAiVerification = res.verificationMethod === 'ai' && res.isPackaging === true && res.aiVerified === true;
+    setAiVerified(isGenuineAiVerification);
+    setVerificationMethod(res.verificationMethod || (isGenuineAiVerification ? 'ai' : 'manual'));
     if (res.image) setScannedImage(res.image);
     if (res.detectedType) setMaterialType(res.detectedType);
     if (res.suggestedGrade) setGrade(res.suggestedGrade);
@@ -111,6 +115,7 @@ export default function CreateListingPage({ setActiveTab }) {
     reader.onload = (event) => {
       setScannedImage(event.target.result);
       setAiVerified(false);
+      setVerificationMethod('manual');
       setErrorMsg(null);
     };
     reader.readAsDataURL(file);
@@ -173,7 +178,8 @@ export default function CreateListingPage({ setActiveTab }) {
       createdByEmail: currentUser?.email || 'contact@looppack.io',
       createdAt: new Date().toISOString(),
       aiVerified: Boolean(aiVerified),
-      verificationStatus: aiVerified ? 'AI Verified' : 'Seller Direct'
+      verificationMethod,
+      verificationStatus: aiVerified && verificationMethod === 'ai' ? 'AI Verified' : 'Seller Direct'
     };
 
     try {
@@ -245,9 +251,8 @@ export default function CreateListingPage({ setActiveTab }) {
             </div>
           </div>
         </div>
-        <button
+        <div
           type="button"
-          onClick={() => setAiVerified(!aiVerified)}
           style={{
             fontSize: '0.76rem',
             fontWeight: '800',
@@ -257,13 +262,13 @@ export default function CreateListingPage({ setActiveTab }) {
             border: aiVerified ? '1px solid #6EE7B7' : '1px solid #FDE68A',
             color: aiVerified ? '#065F46' : '#B45309',
             whiteSpace: 'nowrap',
-            cursor: 'pointer',
+            cursor: 'default',
             transition: 'all 0.2s ease'
           }}
-          title="Click to toggle between AI Verified and Seller Direct status"
+          title="Verification status is determined by the scanner result"
         >
           {aiVerified ? '✨ AI Verified' : '👤 Seller Direct'}
-        </button>
+        </div>
       </div>
 
       {submitted && (
@@ -291,6 +296,12 @@ export default function CreateListingPage({ setActiveTab }) {
         onUseCurrentLocation={requestLocation}
         onSetLocation={() => setPickupLocationSet(true)}
         onLocationChange={() => setPickupLocationSet(false)}
+        geocodeLocation={`${pickupAddress.city}, ${pickupAddress.state}`}
+        onAddressChange={address => {
+          setPickupAddress(current => ({ ...current, state: address.state, city: address.city }));
+          setLocation(formatPickupAddress({ ...pickupAddress, ...address }));
+          setPickupLocationSet(false);
+        }}
         addressContent={(
           <div style={{ marginBottom: '9px' }}>
             <AddressForm
