@@ -1167,6 +1167,7 @@ app.post('/api/v1/trucks', async (req, res) => {
   };
 
   const client = getNeonClient();
+  let persistedInNeon = false;
   if (client) {
     try {
       await client`
@@ -1179,12 +1180,13 @@ app.post('/api/v1/trucks', async (req, res) => {
           ${newTruck.companyName}, ${newTruck.companyEmail}, ${newTruck.lat}, ${newTruck.lon}, ${newTruck.originCoordinates?.lat ?? null}, ${newTruck.originCoordinates?.lon ?? null}, ${newTruck.destinationCoordinates?.lat ?? null}, ${newTruck.destinationCoordinates?.lon ?? null}, ${newTruck.locationUpdatedAt}, ${newTruck.createdAt}
         )
       `;
+      persistedInNeon = true;
     } catch (err) {
-      console.error('[Neon DB Truck Insert Error]:', err.message);
+      console.error('[Neon DB Truck Insert Error, using local fallback]:', err.message);
     }
   }
 
-  saveLocalTruck(newTruck);
+  if (!persistedInNeon) saveLocalTruck(newTruck);
 
   console.log(`[API] New Truck Listed by @${newTruck.createdBy} (${newTruck.companyName}): Reg ${newTruck.vehicleReg} - ${newTruck.truckName}`);
 
